@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ByBit AI — Управление доступом</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    .topbar {
+      background: linear-gradient(135deg, #1e2a50, #131d3a);
+      border-bottom: 1px solid #1f2d50;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .topbar h1 { font-size: 18px; font-weight: 700; color: #818cf8; }
+    .topbar span { font-size: 12px; color: #475569; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 24px; }
+
+    /* Login */
+    #login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 60vh;
+      gap: 16px;
+    }
+    .login-box {
+      background: #111827;
+      border: 1px solid #1f2d50;
+      border-radius: 16px;
+      padding: 36px 40px;
+      width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .login-box h2 { font-size: 16px; font-weight: 700; color: #818cf8; text-align: center; }
+    .login-box p { font-size: 12px; color: #475569; text-align: center; }
+
+    /* Cards */
+    .card {
+      background: #111827;
+      border: 1px solid #1f2d50;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px;
+      background: #161f35;
+      border-bottom: 1px solid #1f2d50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-header h2 { font-size: 14px; font-weight: 700; color: #94a3b8; }
+    .card-body { padding: 20px; }
+
+    /* Stats */
+    .stats { display: flex; gap: 16px; }
+    .stat {
+      flex: 1;
+      background: #161f35;
+      border: 1px solid #1f2d50;
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-value { font-size: 28px; font-weight: 700; color: #818cf8; }
+    .stat-label { font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* Form */
+    .form-row { display: flex; gap: 10px; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .form-group label { font-size: 11px; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    input[type="text"], input[type="password"] {
+      background: #0d1117;
+      border: 1px solid #2d3561;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    input:focus { border-color: #6366f1; }
+    input::placeholder { color: #374151; }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px 18px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: #4f46e5; color: white; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-primary:disabled { background: #1f2937; cursor: default; color: #4b5563; }
+    .btn-danger { background: rgba(239,68,68,0.12); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); font-size: 12px; padding: 6px 12px; }
+    .btn-danger:hover { background: rgba(239,68,68,0.22); }
+    .btn-outline { background: transparent; color: #818cf8; border: 1px solid #2d3561; }
+    .btn-outline:hover { background: rgba(99,102,241,0.1); }
+
+    .msg { font-size: 12px; min-height: 16px; }
+    .msg.ok { color: #10b981; }
+    .msg.err { color: #ef4444; }
+
+    /* Table */
+    .uid-table { width: 100%; border-collapse: collapse; }
+    .uid-table th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 8px 12px;
+      border-bottom: 1px solid #1f2d50;
+    }
+    .uid-table td {
+      padding: 12px;
+      border-bottom: 1px solid #1a2240;
+      vertical-align: middle;
+    }
+    .uid-table tr:last-child td { border-bottom: none; }
+    .uid-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .uid-cell { font-family: monospace; font-size: 13px; color: #818cf8; }
+    .note-cell { color: #64748b; font-size: 12px; }
+    .date-cell { color: #374151; font-size: 11px; white-space: nowrap; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #374151;
+      font-size: 13px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: 999px;
+      color: #10b981;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+    }
+
+    .search-row { display: flex; gap: 10px; align-items: center; }
+    #search-input { max-width: 260px; }
+
+    #logout-btn { background: none; border: none; color: #475569; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: 6px; }
+    #logout-btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.07); }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🤖 ByBit AI — Доступ</h1>
+  <span id="server-url"></span>
+  <div style="flex:1"></div>
+  <button id="logout-btn" style="display:none">Выйти</button>
+</div>
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-box">
+    <h2>🔐 Вход в панель</h2>
+    <p>Введи пароль администратора</p>
+    <div class="form-group">
+      <label>Пароль</label>
+      <input type="password" id="login-password" placeholder="Admin password" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="login-btn">Войти</button>
+    <div class="msg" id="login-msg"></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard" style="display:none">
+  <div class="container">
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Активных пользователей</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="stat-today">—</div>
+        <div class="stat-label">Добавлено сегодня</div>
+      </div>
+    </div>
+
+    <!-- Add UID -->
+    <div class="card">
+      <div class="card-header">
+        <h2>➕ Добавить пользователя</h2>
+      </div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-row">
+          <div class="form-group">
+            <label>ByBit UID</label>
+            <input type="text" id="add-uid" placeholder="Например: 123456789" maxlength="50">
+          </div>
+          <div class="form-group" style="flex:2">
+            <label>Заметка (необязательно)</label>
+            <input type="text" id="add-note" placeholder="Например: Иван — реферал 12.05.2025">
+          </div>
+          <div class="form-group" style="flex:0;justify-content:flex-end">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary" id="add-btn">Добавить</button>
+          </div>
+        </div>
+        <div class="msg" id="add-msg"></div>
+      </div>
+    </div>
+
+    <!-- UID list -->
+    <div class="card">
+      <div class="card-header">
+        <h2>👥 Список доступа</h2>
+        <div class="search-row">
+          <input type="text" id="search-input" placeholder="Поиск по UID или заметке...">
+          <button class="btn btn-outline" id="refresh-btn">↻ Обновить</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="table-container">
+          <div class="empty-state">Загрузка...</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let adminPassword = '';
+  let allUIDs = [];
+
+  document.getElementById('server-url').textContent = window.location.origin;
+
+  // ─── Login ──────────────────────────────────────────────────────────────────
+
+  async function login(password) {
+    try {
+      const res = await fetch('/admin/uids', {
+        headers: { 'x-admin-password': password }
+      });
+      if (res.status === 403) return false;
+      if (!res.ok) return false;
+      return true;
+    } catch { return false; }
+  }
+
+  document.getElementById('login-btn').addEventListener('click', async () => {
+    const pw = document.getElementById('login-password').value.trim();
+    const msg = document.getElementById('login-msg');
+    const btn = document.getElementById('login-btn');
+    if (!pw) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Проверяю...';
+    msg.textContent = '';
+
+    const ok = await login(pw);
+    if (ok) {
+      adminPassword = pw;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('dashboard').style.display = '';
+      document.getElementById('logout-btn').style.display = '';
+      loadUIDs();
+    } else {
+      msg.className = 'msg err';
+      msg.textContent = '❌ Неверный пароль';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Войти';
+  });
+
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+  });
+
+  document.getElementById('logout-btn').addEventListener('click', () => {
+    adminPassword = '';
+    document.getElementById('login-screen').style.display = '';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('logout-btn').style.display = 'none';
+    document.getElementById('login-password').value = '';
+  });
+
+  // ─── Load UIDs ──────────────────────────────────────────────────────────────
+
+  async function loadUIDs() {
+    try {
+      const res = await fetch('/admin/uids', {
+        headers: { 'x-admin-password': adminPassword }
+      });
+      allUIDs = await res.json();
+      renderTable(allUIDs);
+      updateStats(allUIDs);
+    } catch (err) {
+      document.getElementById('table-container').innerHTML =
+        `<div class="empty-state">Ошибка загрузки: ${err.message}</div>`;
+    }
+  }
+
+  function updateStats(uids) {
+    document.getElementById('stat-total').textContent = uids.length;
+    const today = new Date().toDateString();
+    const todayCount = uids.filter(u => new Date(u.added_at).toDateString() === today).length;
+    document.getElementById('stat-today').textContent = todayCount;
+  }
+
+  function renderTable(uids) {
+    if (!uids.length) {
+      document.getElementById('table-container').innerHTML =
+        '<div class="empty-state">Список пуст — добавь первого пользователя выше</div>';
+      return;
+    }
+
+    const rows = uids.map(u => {
+      const date = new Date(u.added_at).toLocaleString('ru', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+      return `
+        <tr>
+          <td class="uid-cell">${escHtml(u.uid)}</td>
+          <td class="note-cell">${escHtml(u.note || '—')}</td>
+          <td class="date-cell">${date}</td>
+          <td><button class="btn btn-danger" onclick="removeUID('${escHtml(u.uid)}')">Удалить</button></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('table-container').innerHTML = `
+      <table class="uid-table">
+        <thead>
+          <tr>
+            <th>ByBit UID</th>
+            <th>Заметка</th>
+            <th>Добавлен</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // ─── Add UID ────────────────────────────────────────────────────────────────
+
+  document.getElementById('add-btn').addEventListener('click', async () => {
+    const uid = document.getElementById('add-uid').value.trim();
+    const note = document.getElementById('add-note').value.trim();
+    const msg = document.getElementById('add-msg');
+    const btn = document.getElementById('add-btn');
+    if (!uid) { msg.className = 'msg err'; msg.textContent = '❌ Введи UID'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Добавляю...';
+
+    try {
+      const res = await fetch('/admin/uids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+        body: JSON.stringify({ uid, note })
+      });
+      const data = await res.json();
+      if (data.success) {
+        msg.className = 'msg ok';
+        msg.textContent = `✅ UID ${uid} добавлен`;
+        document.getElementById('add-uid').value = '';
+        document.getElementById('add-note').value = '';
+        loadUIDs();
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + (data.error || 'Ошибка');
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '❌ ' + err.message;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Добавить';
+    setTimeout(() => { msg.textContent = ''; }, 4000);
+  });
+
+  // ─── Remove UID ─────────────────────────────────────────────────────────────
+
+  async function removeUID(uid) {
+    if (!confirm(`Удалить UID ${uid}?\nПользователь потеряет доступ к расширению.`)) return;
+    try {
+      await fetch(`/admin/uids/${encodeURIComponent(uid)}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword }
+      });
+      loadUIDs();
+    } catch (err) {
+      alert('Ошибка: ' + err.message);
+    }
+  }
+
+  // ─── Search ─────────────────────────────────────────────────────────────────
+
+  document.getElementById('search-input').addEventListener('input', e => {
+    const q = e.target.value.toLowerCase();
+    const filtered = allUIDs.filter(u =>
+      u.uid.toLowerCase().includes(q) || (u.note || '').toLowerCase().includes(q)
+    );
+    renderTable(filtered);
+  });
+
+  document.getElementById('refresh-btn').addEventListener('click', loadUIDs);
+
+  // ─── Utils ──────────────────────────────────────────────────────────────────
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
