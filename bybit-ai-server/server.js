@@ -222,7 +222,7 @@ app.post('/analyze', async (req, res) => {
   currentContent.push({ type: 'text', text: promptText });
   messages.push({ role: 'user', content: currentContent });
 
-  const maxTokens = (mode === 'long' || mode === 'short') ? 350 : 120;
+  const maxTokens = (mode === 'long' || mode === 'short') ? 400 : 300;
 
   try {
     const apiRes = await fetch(CLAUDE_API_URL, {
