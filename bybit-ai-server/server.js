@@ -118,7 +118,9 @@ app.delete('/admin/uids/:uid', requireAdmin, async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// Admin panel served from public/admin.html via express.static
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
