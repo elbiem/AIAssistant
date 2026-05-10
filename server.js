@@ -214,6 +214,7 @@ app.delete('/admin/uids/:uid', requireAdmin, async (req, res) => {
 
 app.post('/analyze', async (req, res) => {
   const { uid, key, mode, context, userMessage, history, screenshotBase64, lang } = req.body;
+  console.log(`[analyze] uid=${uid} lang=${lang} mode=${mode}`);
   const systemPrompt = lang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT;
 
   if (key !== ACCESS_KEY) {
