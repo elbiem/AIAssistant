@@ -14,8 +14,9 @@ const ACCESS_KEY        = process.env.ACCESS_KEY || 'bybit-ext-key';
 const PORT              = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
-const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL          = 'claude-sonnet-4-6';
+const CLAUDE_API_URL  = 'https://api.anthropic.com/v1/messages';
+const MODEL_FAST      = 'claude-haiku-4-5-20251001';  // auto + chat
+const MODEL_FULL      = 'claude-sonnet-4-6';           // long/short analysis
 
 const SYSTEM_PROMPT_EN = `You are an experienced crypto trader. You analyze ONLY:
 1. Candles (patterns, structure, impulses, pullbacks, candle volume)
@@ -276,7 +277,9 @@ app.post('/analyze', async (req, res) => {
   currentContent.push({ type: 'text', text: promptText });
   messages.push({ role: 'user', content: currentContent });
 
-  const maxTokens = (mode === 'long' || mode === 'short') ? 400 : 300;
+  const isDeepMode = (mode === 'long' || mode === 'short');
+  const model     = isDeepMode ? MODEL_FULL : MODEL_FAST;
+  const maxTokens = isDeepMode ? 400 : 300;
 
   try {
     const apiRes = await fetch(CLAUDE_API_URL, {
@@ -286,7 +289,7 @@ app.post('/analyze', async (req, res) => {
         'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system: systemPrompt, messages })
+      body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages })
     });
 
     if (!apiRes.ok) {
