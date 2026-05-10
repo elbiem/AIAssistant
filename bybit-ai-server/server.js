@@ -17,6 +17,48 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL          = 'claude-sonnet-4-6';
 
+const SYSTEM_PROMPT_EN = `You are an experienced crypto trader. You analyze ONLY:
+1. Candles (patterns, structure, impulses, pullbacks, candle volume)
+2. Volume (movement confirmation, impulse weakness/strength, anomalous spikes)
+3. User's drawings — BLUE lines (trend lines, diagonals, support/resistance levels, triangles, wedges, channels, zones, consolidations)
+
+MANDATORY before analysis: identify the global trend from the entire visible chart:
+- Overall direction (uptrend / downtrend / sideways)
+- Market structure: higher highs/lows, where price is heading globally
+- Trading against the trend — increased risk, reduces probability rating
+
+For each level or line from drawings MANDATORY evaluate two scenarios:
+- BREAKOUT: is there impulse, volume, candle close beyond the level — how likely?
+- BOUNCE: is there price reaction, weakness at level, absorption — how likely?
+Choose the most probable scenario considering the global trend.
+
+IGNORE:
+- Red/orange horizontal line — this is just ByBit's current price marker, NOT a level. Never mention it.
+- Any indicators: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, stochastic, etc. They don't exist.
+
+Two response modes:
+
+AUTO MODE (no direction specified):
+Format — strictly 1-2 lines:
+📈 Long / 📉 Short / ⏳ Wait — [one reason]
+[Optional: entry level or stop]
+
+LONG/SHORT MODE (user specified direction):
+Format — strictly 3-4 lines:
+✅ Enter / ❌ Don't enter / ⚠️ Risky — [main reason]
+Success probability: X%
+🎯 Targets: [level 1] (+X%) → [level 2] (+X%)
+🛑 Stop: [level] (-X%)
+⚖️ R:R = 1:[ratio] — [Excellent / Good / Acceptable / Poor] (min. norm 1:3)
+
+PERCENTAGE RULES (mandatory):
+- LONG: target above entry → % = (target - entry) / entry * 100, always positive
+- SHORT: target below entry → % = (entry - target) / entry * 100, always positive
+- Stop: % loss from entry, always negative
+Example long entry 95000: target 97000 = +2.1%, stop 93500 = -1.6%
+
+Don't explain the obvious. Don't write lists. Reply in English.`;
+
 const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Анализируешь ТОЛЬКО:
 1. Свечи (паттерны, структура, импульсы, откаты, объём свечей)
 2. Объём (подтверждение движений, слабость/сила импульса, аномальные всплески)
@@ -171,7 +213,9 @@ app.delete('/admin/uids/:uid', requireAdmin, async (req, res) => {
 // POST /analyze  { uid, key, mode, context, userMessage, history, screenshotBase64 }
 
 app.post('/analyze', async (req, res) => {
-  const { uid, key, mode, context, userMessage, history, screenshotBase64 } = req.body;
+  const { uid, key, mode, context, userMessage, history, screenshotBase64, lang } = req.body;
+  console.log(`[analyze] uid=${uid} lang=${lang} mode=${mode}`);
+  const systemPrompt = lang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT;
 
   if (key !== ACCESS_KEY) {
     return res.status(403).json({ error: 'Invalid key' });
@@ -211,12 +255,22 @@ app.post('/analyze', async (req, res) => {
   let promptText;
   if (userMessage) {
     promptText = userMessage;
-  } else if (mode === 'long') {
-    promptText = `Я планирую войти в ЛОНГ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
-  } else if (mode === 'short') {
-    promptText = `Я планирую войти в ШОРТ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+  } else if (lang === 'en') {
+    if (mode === 'long') {
+      promptText = `I'm planning to go LONG${context ? ' on ' + context : ''}. Look at my drawings and current pattern. Should I enter right now? Give probability of success in %.`;
+    } else if (mode === 'short') {
+      promptText = `I'm planning to go SHORT${context ? ' on ' + context : ''}. Look at my drawings and current pattern. Should I enter right now? Give probability of success in %.`;
+    } else {
+      promptText = `What's on the chart${context ? ' ' + context : ''}? Long, short or wait?`;
+    }
   } else {
-    promptText = `Что на графике${context ? ' ' + context : ''}? Лонг, шорт или ждать?`;
+    if (mode === 'long') {
+      promptText = `Я планирую войти в ЛОНГ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+    } else if (mode === 'short') {
+      promptText = `Я планирую войти в ШОРТ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+    } else {
+      promptText = `Что на графике${context ? ' ' + context : ''}? Лонг, шорт или ждать?`;
+    }
   }
 
   currentContent.push({ type: 'text', text: promptText });
@@ -232,7 +286,7 @@ app.post('/analyze', async (req, res) => {
         'x-api-key': ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system: SYSTEM_PROMPT, messages })
+      body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system: systemPrompt, messages })
     });
 
     if (!apiRes.ok) {
@@ -251,9 +305,7 @@ app.post('/analyze', async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
+// Admin panel served from public/admin.html via express.static
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
