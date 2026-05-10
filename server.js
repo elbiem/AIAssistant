@@ -254,12 +254,22 @@ app.post('/analyze', async (req, res) => {
   let promptText;
   if (userMessage) {
     promptText = userMessage;
-  } else if (mode === 'long') {
-    promptText = `Я планирую войти в ЛОНГ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
-  } else if (mode === 'short') {
-    promptText = `Я планирую войти в ШОРТ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+  } else if (lang === 'en') {
+    if (mode === 'long') {
+      promptText = `I'm planning to go LONG${context ? ' on ' + context : ''}. Look at my drawings and current pattern. Should I enter right now? Give probability of success in %.`;
+    } else if (mode === 'short') {
+      promptText = `I'm planning to go SHORT${context ? ' on ' + context : ''}. Look at my drawings and current pattern. Should I enter right now? Give probability of success in %.`;
+    } else {
+      promptText = `What's on the chart${context ? ' ' + context : ''}? Long, short or wait?`;
+    }
   } else {
-    promptText = `Что на графике${context ? ' ' + context : ''}? Лонг, шорт или ждать?`;
+    if (mode === 'long') {
+      promptText = `Я планирую войти в ЛОНГ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+    } else if (mode === 'short') {
+      promptText = `Я планирую войти в ШОРТ${context ? ' по ' + context : ''}. Смотри на мои чертежи и текущий паттерн. Стоит входить прямо сейчас? Дай вероятность успешной отработки в %.`;
+    } else {
+      promptText = `Что на графике${context ? ' ' + context : ''}? Лонг, шорт или ждать?`;
+    }
   }
 
   currentContent.push({ type: 'text', text: promptText });
