@@ -278,7 +278,7 @@ app.post('/analyze', async (req, res) => {
   messages.push({ role: 'user', content: currentContent });
 
   const isDeepMode = (mode === 'long' || mode === 'short');
-  const model     = isDeepMode ? MODEL_FULL : MODEL_FAST;
+  const model     = MODEL_FULL;
   const maxTokens = isDeepMode ? 400 : 300;
 
   try {
