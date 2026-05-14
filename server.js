@@ -105,7 +105,7 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.DATABASE_URL ? { rejectUnauthorized: false } : false)
 });
 
 // ─── DB init ─────────────────────────────────────────────────────────────────
