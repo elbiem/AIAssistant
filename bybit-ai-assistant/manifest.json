@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI Trader Assistant for ByBit",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI trading assistant for ByBit — analyzes your chart and gives real-time trade recommendations using Claude AI.",
 
   "permissions": [
@@ -10,7 +10,7 @@
   ],
 
   "host_permissions": [
-    "<all_urls>"
+    "https://*.bybit.com/*"
   ],
 
   "background": {
