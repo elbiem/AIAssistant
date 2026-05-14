@@ -13,6 +13,7 @@ const ADMIN_PASSWORD    = process.env.ADMIN_PASSWORD || 'changeme123';
 const ACCESS_KEY        = process.env.ACCESS_KEY || 'bybit-ext-key';
 const PORT              = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const DEMO_UID          = process.env.DEMO_UID || '1000000';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL          = 'claude-sonnet-4-6';
@@ -143,6 +144,10 @@ app.get('/check', async (req, res) => {
     return res.status(400).json({ authorized: false, error: 'No UID provided' });
   }
 
+  if (uid.trim() === DEMO_UID) {
+    return res.json({ authorized: true });
+  }
+
   try {
     const { rows } = await pool.query(
       'SELECT uid FROM allowed_uids WHERE uid = $1',
@@ -225,11 +230,13 @@ app.post('/analyze', async (req, res) => {
   }
 
   // Verify UID still has access
-  try {
-    const { rows } = await pool.query('SELECT uid FROM allowed_uids WHERE uid = $1', [uid.trim()]);
-    if (rows.length === 0) return res.status(403).json({ error: 'Access denied' });
-  } catch (err) {
-    return res.status(500).json({ error: 'DB error' });
+  if (uid.trim() !== DEMO_UID) {
+    try {
+      const { rows } = await pool.query('SELECT uid FROM allowed_uids WHERE uid = $1', [uid.trim()]);
+      if (rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+    } catch (err) {
+      return res.status(500).json({ error: 'DB error' });
+    }
   }
 
   if (!ANTHROPIC_API_KEY) {

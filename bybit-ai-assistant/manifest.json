@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "AI Trader Assistant for ByBit",
+  "version": "1.0.0",
+  "description": "AI trading assistant for ByBit — analyzes your chart and gives real-time trade recommendations using Claude AI.",
+
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+
+  "host_permissions": [
+    "<all_urls>"
+  ],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://*.bybit.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "icons": {
+    "16":  "icon16.png",
+    "32":  "icon32.png",
+    "48":  "icon48.png",
+    "128": "icon128.png"
+  },
+
+  "action": {
+    "default_title": "AI Trader Assistant for ByBit",
+    "default_icon": {
+      "16":  "icon16.png",
+      "32":  "icon32.png",
+      "48":  "icon48.png",
+      "128": "icon128.png"
+    }
+  }
+}
