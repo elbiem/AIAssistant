@@ -759,6 +759,8 @@
         ${error !== 'no_uid' ? `
           <p style="margin-top:4px;">Нет реферального аккаунта? Зарегистрируйся:</p>
           <a href="${REFERRAL_LINK}" target="_blank">Зарегистрироваться на ByBit</a>
+          <p style="margin-top:8px;">Уже зарегистрирован? Перенеси KYC на реферальный аккаунт:</p>
+          <a href="https://www.bybit.com/ru-RU/help-center/article/How-to-Transfer-Your-Identity-to-Another-Account" target="_blank" style="background:#1e2a50; border:1px solid #2d3d6b;">Инструкция по переносу KYC →</a>
         ` : ''}
       `;
     }
