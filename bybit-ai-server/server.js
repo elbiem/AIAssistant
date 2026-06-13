@@ -75,6 +75,8 @@ Success probability: X%
 🛑 Stop: [level] (-X%)
 ⚖️ R:R = 1:[ratio] — [Excellent / Good / Acceptable / Poor] (min. norm 1:3)
 
+If you reject the chosen direction SPECIFICALLY BECAUSE the opposite scenario is likely, always add a final line hinting at the other direction. E.g.: "↩️ Setup is bullish (ascending line squeezing into resistance, breakout up likely) — consider LONG, not short." This helps a user who pressed the wrong button.
+
 PERCENTAGE RULES (mandatory):
 - ALL percentages calculated FROM entry price only, never from previous target
 - LONG: % = (target - entry) / entry * 100, always positive
@@ -181,6 +183,8 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 ВАЖНО в режиме лонг/шорт: никогда не советуй "жди ретест" или "подожди лучший момент".
 Либо ✅ Входи сейчас — либо ❌ Не входи в этот сетап. Ответ должен работать прямо сейчас.
 Если момент плохой — пиши ❌ Не входи с причиной, без советов ждать.
+
+Если отклоняешь направление ИМЕННО ПОТОМУ, что вероятен сценарий в противоположную сторону — обязательно добавь последней строкой подсказку про другое направление. Например: "↩️ Сетап бычий (наклонка поджимается к сопротивлению, вероятен пробой вверх) — рассмотри ЛОНГ, а не шорт." Это помогает пользователю, который нажал не ту кнопку.
 
 Все проценты рассчитывай строго от значения "Вход". Сначала определи Вход, затем считай.
 
