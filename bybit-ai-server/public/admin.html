@@ -316,6 +316,19 @@
       </div>
     </div>
 
+    <!-- Analysis log -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🔎 Последние анализы (Лонг/Шорт)</h2>
+        <button class="btn btn-outline" id="log-refresh-btn">↻ Обновить</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="log-list-container">
+          <div class="empty-state">Загрузка...</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -356,6 +369,7 @@
       document.getElementById('logout-btn').style.display = '';
       loadUIDs();
       loadMemory();
+      loadAnalysisLog();
     } else {
       msg.className = 'msg err';
       msg.textContent = '❌ Неверный пароль';
@@ -665,6 +679,7 @@
           ${img}
           <div style="flex:1;display:flex;flex-direction:column;gap:6px">
             <div style="display:flex;align-items:center;gap:8px">
+              <span class="uid-cell" style="font-size:12px">#${r.id}</span>
               ${outcomeBadge(r.outcome)}
               <span class="date-cell">${date}</span>
             </div>
@@ -692,6 +707,66 @@
   }
 
   document.getElementById('mem-refresh-btn').addEventListener('click', loadMemory);
+
+  // ─── Analysis log ───────────────────────────────────────────────────────────
+
+  async function loadAnalysisLog() {
+    try {
+      const res = await fetch('/admin/analysis-log', { headers: { 'x-admin-password': adminPassword } });
+      const rows = await res.json();
+      renderAnalysisLog(rows);
+    } catch (err) {
+      document.getElementById('log-list-container').innerHTML =
+        `<div class="empty-state">Ошибка загрузки: ${err.message}</div>`;
+    }
+  }
+
+  function renderAnalysisLog(rows) {
+    if (!rows.length) {
+      document.getElementById('log-list-container').innerHTML =
+        '<div class="empty-state">Пока нет анализов — нажми Лонг/Шорт в расширении</div>';
+      return;
+    }
+    const pw = encodeURIComponent(adminPassword);
+    const modeLabel = m => m === 'long' ? '📈 Лонг' : m === 'short' ? '📉 Шорт' : m;
+
+    const cards = rows.map(r => {
+      const date = new Date(r.created_at).toLocaleString('ru', {
+        day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const queryImg = r.has_query
+        ? `<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:10px;color:#475569;text-transform:uppercase">Анализируемый график</div><img src="/admin/analysis-log/${r.id}/image?password=${pw}" style="width:200px;border-radius:8px;border:1px solid #2d3561"></div>`
+        : '';
+      const matched = Array.isArray(r.matched) ? r.matched : [];
+      const matchedHtml = matched.length
+        ? matched.map(m => `
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
+              <img src="/admin/memory/${m.id}/image?password=${pw}" style="width:130px;border-radius:8px;border:1px solid #2d3561" onerror="this.style.display='none'">
+              <span style="font-size:11px;color:#94a3b8">#${m.id}${m.sim != null ? ` · ${(m.sim*100).toFixed(1)}%` : ' · последняя'}</span>
+            </div>`).join('')
+        : '<span class="date-cell">память не подбиралась</span>';
+
+      return `
+        <div style="padding:16px;border-bottom:1px solid #1a2240;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="badge">${modeLabel(r.mode)}</span>
+            ${r.context ? `<span style="font-size:12px;color:#94a3b8">${escHtml(r.context)}</span>` : ''}
+            <span class="date-cell" style="margin-left:auto">${date}</span>
+          </div>
+          <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+            ${queryImg}
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font-size:10px;color:#475569;text-transform:uppercase">Подобранные из памяти</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">${matchedHtml}</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('log-list-container').innerHTML = cards;
+  }
+
+  document.getElementById('log-refresh-btn').addEventListener('click', loadAnalysisLog);
 
   document.getElementById('mem-reindex-btn').addEventListener('click', async () => {
     const msg = document.getElementById('mem-reindex-msg');

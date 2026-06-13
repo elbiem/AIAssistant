@@ -238,8 +238,23 @@ async function initDB() {
   `);
   // Add embedding column if the table predates it
   await pool.query(`ALTER TABLE trade_memory ADD COLUMN IF NOT EXISTS embedding TEXT`);
+  // Log of deep analyses — which chart was sent and which memories were matched
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS analysis_log (
+      id          SERIAL PRIMARY KEY,
+      mode        VARCHAR(20),
+      context     TEXT DEFAULT '',
+      query_image TEXT,
+      query_media VARCHAR(30) DEFAULT 'image/jpeg',
+      matched     TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   console.log('DB ready');
 }
+
+// Keep only the most recent N analysis-log rows
+const LOG_KEEP = parseInt(process.env.LOG_KEEP || '40', 10);
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -539,6 +554,36 @@ app.delete('/admin/memory/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Analysis log: which chart was analyzed and which memories matched ───────
+
+// GET /admin/analysis-log
+app.get('/admin/analysis-log', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, mode, context, matched, created_at,
+              (query_image IS NOT NULL) AS has_query
+       FROM analysis_log ORDER BY created_at DESC`
+    );
+    res.json(rows.map(r => ({ ...r, matched: (() => { try { return JSON.parse(r.matched); } catch { return []; } })() })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/analysis-log/:id/image — the analyzed chart screenshot
+app.get('/admin/analysis-log/:id/image', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT query_image, query_media FROM analysis_log WHERE id = $1', [req.params.id]
+    );
+    if (!rows.length || !rows[0].query_image) return res.status(404).send('No image');
+    res.set('Content-Type', rows[0].query_media || 'image/jpeg');
+    res.send(Buffer.from(rows[0].query_image, 'base64'));
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
 // ─── Analyze endpoint ────────────────────────────────────────────────────────
 // POST /analyze  { uid, key, mode, context, userMessage, history, screenshotBase64 }
 
@@ -572,6 +617,7 @@ app.post('/analyze', async (req, res) => {
 
   // ── Inject trade memory ──────────────────────────────────────────────────
   let memImages = [];
+  let matchedInfo = [];
   try {
     if (MEMORY_LESSONS > 0) {
       const { rows } = await pool.query(
@@ -605,6 +651,7 @@ app.post('/analyze', async (req, res) => {
             .slice(0, MEMORY_IMAGES);
           if (scored.length) {
             pickedIds = scored.map(s => s.id);
+            matchedInfo = scored.map(s => ({ id: s.id, sim: Number(s.sim.toFixed(4)), method: 'similar' }));
             console.log(`[analyze] similar memories: ${scored.map(s => `#${s.id}=${s.sim.toFixed(3)}`).join(' ')}`);
           }
         }
@@ -620,15 +667,35 @@ app.post('/analyze', async (req, res) => {
       } else {
         // Fallback: most recent screenshots (no Voyage key or no embeddings yet)
         const { rows } = await pool.query(
-          `SELECT image_b64, media_type, lesson, outcome FROM trade_memory
+          `SELECT id, image_b64, media_type, lesson, outcome FROM trade_memory
            WHERE image_b64 IS NOT NULL ORDER BY created_at DESC LIMIT $1`,
           [MEMORY_IMAGES]
         );
         memImages = rows;
+        matchedInfo = rows.map(r => ({ id: r.id, sim: null, method: 'recent' }));
       }
     }
   } catch (err) {
     console.error('Memory load error:', err.message);
+  }
+
+  // Log this deep analysis (which chart was sent, which memories matched) — best-effort
+  if (isDeepMode) {
+    try {
+      await pool.query(
+        `INSERT INTO analysis_log (mode, context, query_image, query_media, matched)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [mode, context || '', screenshotBase64 || null, 'image/jpeg', JSON.stringify(matchedInfo)]
+      );
+      await pool.query(
+        `DELETE FROM analysis_log WHERE id NOT IN (
+           SELECT id FROM analysis_log ORDER BY created_at DESC LIMIT $1
+         )`,
+        [LOG_KEEP]
+      );
+    } catch (err) {
+      console.error('Analysis log error:', err.message);
+    }
   }
 
   // Build messages.
