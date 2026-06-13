@@ -582,7 +582,9 @@ app.post('/analyze', async (req, res) => {
         const lessons = rows
           .map((r, i) => `${i + 1}. ${r.lesson}${r.outcome ? ` (итог: ${r.outcome})` : ''}`)
           .join('\n');
-        systemPrompt += `\n\nПАМЯТЬ ПРОШЛЫХ СДЕЛОК (личные уроки трейдера — учитывай их при оценке текущего сетапа):\n${lessons}`;
+        systemPrompt += `\n\nПАМЯТЬ ПРОШЛЫХ СДЕЛОК (справочные уроки трейдера).
+ВАЖНО: это НЕ сигнал торговать текущий график так же. Сначала независимо оцени текущий график по правилам выше — приоритет глобального тренда обязателен. Память — лишь дополнительный контекст; она НЕ отменяет приоритет тренда и НЕ должна склонять тебя к контр-трендовому входу только потому, что прошлый похожий паттерн оказался прибыльным. Похожий внешне паттерн в другом тренде может отработать наоборот.
+Уроки:\n${lessons}`;
       }
     }
     // Attach reference screenshots only in deep mode (cost control)
@@ -642,13 +644,13 @@ app.post('/analyze', async (req, res) => {
 
   const currentContent = [];
 
-  // Reference screenshots from memory (clearly labeled as past examples)
+  // Reference screenshots from memory (clearly labeled as past examples, NOT signals)
   for (const mem of memImages) {
-    currentContent.push({ type: 'text', text: `📚 Прошлая сделка для контекста${mem.outcome ? ` (${mem.outcome})` : ''}: ${mem.lesson}` });
+    currentContent.push({ type: 'text', text: `📚 Справочный пример из прошлого${mem.outcome ? ` (${mem.outcome})` : ''} — НЕ сигнал торговать так же: ${mem.lesson}` });
     currentContent.push({ type: 'image', source: { type: 'base64', media_type: mem.media_type || 'image/jpeg', data: mem.image_b64 } });
   }
   if (memImages.length) {
-    currentContent.push({ type: 'text', text: '⬆️ Выше — примеры прошлых сделок (для контекста). ⬇️ Ниже — ТЕКУЩИЙ график, анализируй именно его:' });
+    currentContent.push({ type: 'text', text: '⬆️ Выше — справочные примеры прошлых сделок (только контекст, НЕ сигнал). ⬇️ Ниже — ТЕКУЩИЙ график. Оцени его НЕЗАВИСИМО: сначала глобальный тренд (приоритет!), затем структура. Не копируй направление примеров, если текущий тренд другой:' });
   }
 
   if (screenshotBase64) {
