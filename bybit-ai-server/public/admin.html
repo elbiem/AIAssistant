@@ -265,6 +265,7 @@
           <div class="form-group" style="flex:0 0 auto">
             <label>Скриншот сделки</label>
             <input type="file" id="mem-file" accept="image/*">
+            <div style="font-size:11px;color:#475569;margin-top:4px">или вставь из буфера — Ctrl+V</div>
             <img id="mem-preview" style="display:none;max-width:240px;border-radius:8px;border:1px solid #2d3561;margin-top:8px">
           </div>
           <div class="form-group" style="flex:2">
@@ -499,17 +500,43 @@
 
   let memImageData = null; // data URL of selected screenshot
 
-  document.getElementById('mem-file').addEventListener('change', e => {
-    const file = e.target.files[0];
-    if (!file) return;
+  function setMemImage(dataUrl) {
+    memImageData = dataUrl;
+    const preview = document.getElementById('mem-preview');
+    preview.src = dataUrl;
+    preview.style.display = '';
+  }
+
+  function readImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return false;
     const reader = new FileReader();
-    reader.onload = () => {
-      memImageData = reader.result;
-      const preview = document.getElementById('mem-preview');
-      preview.src = memImageData;
-      preview.style.display = '';
-    };
+    reader.onload = () => setMemImage(reader.result);
     reader.readAsDataURL(file);
+    return true;
+  }
+
+  document.getElementById('mem-file').addEventListener('change', e => {
+    readImageFile(e.target.files[0]);
+  });
+
+  // Paste screenshot from clipboard (Ctrl+V) anywhere on the dashboard
+  document.addEventListener('paste', e => {
+    if (document.getElementById('dashboard').style.display === 'none') return;
+    const items = (e.clipboardData || window.clipboardData)?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (readImageFile(file)) {
+          e.preventDefault();
+          const msg = document.getElementById('mem-msg');
+          msg.className = 'msg ok';
+          msg.textContent = '📋 Скриншот вставлен из буфера';
+          document.getElementById('mem-preview').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        break;
+      }
+    }
   });
 
   document.getElementById('mem-analyze-btn').addEventListener('click', async () => {
