@@ -599,9 +599,12 @@ app.post('/analyze', async (req, res) => {
     console.error('Memory load error:', err.message);
   }
 
-  // Build messages
+  // Build messages.
+  // Conversation history is only relevant for the chat feature (a typed question).
+  // Button analyses (long/short/auto) must be independent one-shot reads of the
+  // current chart — stale history from earlier tests/other coins would bias them.
   const messages = [];
-  if (Array.isArray(history)) {
+  if (userMessage && Array.isArray(history)) {
     for (const msg of history.slice(-10)) {
       messages.push({ role: msg.role, content: msg.content });
     }
