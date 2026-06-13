@@ -26,6 +26,12 @@ const MEMORY_IMAGES = parseInt(process.env.MEMORY_IMAGES || '2', 10);
 // How many memory lessons (text) to inject into the system prompt.
 const MEMORY_LESSONS = parseInt(process.env.MEMORY_LESSONS || '30', 10);
 
+// Voyage AI multimodal embeddings — used for visual similarity search over memory.
+// If VOYAGE_API_KEY is unset, memory falls back to "most recent" screenshots.
+const VOYAGE_API_KEY   = process.env.VOYAGE_API_KEY || '';
+const VOYAGE_API_URL   = 'https://api.voyageai.com/v1/multimodalembeddings';
+const VOYAGE_MODEL     = process.env.VOYAGE_MODEL || 'voyage-multimodal-3';
+
 const SYSTEM_PROMPT_EN = `You are an experienced crypto trader. You analyze ONLY:
 1. Candles (patterns, structure, impulses, pullbacks, candle volume)
 2. Volume (movement confirmation, impulse weakness/strength, anomalous spikes)
@@ -196,9 +202,12 @@ async function initDB() {
       description TEXT DEFAULT '',
       lesson      TEXT DEFAULT '',
       outcome     VARCHAR(20) DEFAULT '',
+      embedding   TEXT,
       created_at  TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Add embedding column if the table predates it
+  await pool.query(`ALTER TABLE trade_memory ADD COLUMN IF NOT EXISTS embedding TEXT`);
   console.log('DB ready');
 }
 
@@ -228,6 +237,55 @@ async function callClaude({ model, maxTokens, system, messages }) {
   }
   const data = await apiRes.json();
   return data.content[0].text;
+}
+
+// Generate a multimodal embedding for an image via Voyage AI.
+// `dataUrl` must be a full data: URL. inputType: 'document' (stored) or 'query' (search).
+// Returns a number[] or null on any failure (caller falls back gracefully).
+async function voyageEmbedImage(dataUrl, inputType = 'document') {
+  if (!VOYAGE_API_KEY || !dataUrl) return null;
+  try {
+    const apiRes = await fetch(VOYAGE_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${VOYAGE_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: VOYAGE_MODEL,
+        input_type: inputType,
+        inputs: [{ content: [{ type: 'image_base64', image_base64: dataUrl }] }]
+      })
+    });
+    if (!apiRes.ok) {
+      const t = await apiRes.text().catch(() => '');
+      console.error('Voyage error', apiRes.status, t.slice(0, 200));
+      return null;
+    }
+    const data = await apiRes.json();
+    return data?.data?.[0]?.embedding || null;
+  } catch (err) {
+    console.error('Voyage call failed:', err.message);
+    return null;
+  }
+}
+
+function cosineSim(a, b) {
+  if (!a || !b || a.length !== b.length) return -1;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return -1;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+// Reconstruct a data: URL from stored raw base64 + media type
+function toDataUrl(b64, mediaType) {
+  if (!b64) return null;
+  return `data:${mediaType || 'image/jpeg'};base64,${b64}`;
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -364,13 +422,44 @@ app.post('/admin/memory', requireAdmin, async (req, res) => {
   const { data, mediaType } = parseImage(imageBase64);
   if (!lesson || !lesson.trim()) return res.status(400).json({ error: 'Урок не может быть пустым' });
 
+  // Generate visual embedding for similarity search (null if Voyage not configured)
+  let embedding = null;
+  if (data) {
+    const vec = await voyageEmbedImage(toDataUrl(data, mediaType), 'document');
+    if (vec) embedding = JSON.stringify(vec);
+  }
+
   try {
     const { rows } = await pool.query(
-      `INSERT INTO trade_memory (image_b64, media_type, description, lesson, outcome)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [data, mediaType, description || '', lesson.trim(), outcome || '']
+      `INSERT INTO trade_memory (image_b64, media_type, description, lesson, outcome, embedding)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [data, mediaType, description || '', lesson.trim(), outcome || '', embedding]
     );
-    res.json({ success: true, id: rows[0].id });
+    res.json({ success: true, id: rows[0].id, embedded: !!embedding });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Memory: reindex (backfill embeddings for rows missing them) ─────────────
+
+// POST /admin/memory/reindex
+app.post('/admin/memory/reindex', requireAdmin, async (req, res) => {
+  if (!VOYAGE_API_KEY) return res.status(400).json({ error: 'VOYAGE_API_KEY не настроен на сервере' });
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, image_b64, media_type FROM trade_memory
+       WHERE embedding IS NULL AND image_b64 IS NOT NULL`
+    );
+    let done = 0;
+    for (const r of rows) {
+      const vec = await voyageEmbedImage(toDataUrl(r.image_b64, r.media_type), 'document');
+      if (vec) {
+        await pool.query('UPDATE trade_memory SET embedding = $1 WHERE id = $2', [JSON.stringify(vec), r.id]);
+        done++;
+      }
+    }
+    res.json({ success: true, reindexed: done, total: rows.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -466,14 +555,45 @@ app.post('/analyze', async (req, res) => {
         systemPrompt += `\n\nПАМЯТЬ ПРОШЛЫХ СДЕЛОК (личные уроки трейдера — учитывай их при оценке текущего сетапа):\n${lessons}`;
       }
     }
-    // Attach a few reference screenshots only in deep mode (cost control)
+    // Attach reference screenshots only in deep mode (cost control)
     if (isDeepMode && MEMORY_IMAGES > 0) {
-      const { rows } = await pool.query(
-        `SELECT image_b64, media_type, lesson, outcome FROM trade_memory
-         WHERE image_b64 IS NOT NULL ORDER BY created_at DESC LIMIT $1`,
-        [MEMORY_IMAGES]
-      );
-      memImages = rows;
+      let pickedIds = null;
+
+      // Visual similarity search: embed the current chart, rank memory by cosine
+      if (VOYAGE_API_KEY && screenshotBase64) {
+        const queryVec = await voyageEmbedImage(toDataUrl(screenshotBase64, 'image/jpeg'), 'query');
+        if (queryVec) {
+          const { rows } = await pool.query(
+            `SELECT id, embedding FROM trade_memory WHERE embedding IS NOT NULL`
+          );
+          const scored = rows
+            .map(r => { try { return { id: r.id, sim: cosineSim(queryVec, JSON.parse(r.embedding)) }; } catch { return null; } })
+            .filter(Boolean)
+            .sort((a, b) => b.sim - a.sim)
+            .slice(0, MEMORY_IMAGES);
+          if (scored.length) {
+            pickedIds = scored.map(s => s.id);
+            console.log(`[analyze] similar memories: ${scored.map(s => `#${s.id}=${s.sim.toFixed(3)}`).join(' ')}`);
+          }
+        }
+      }
+
+      if (pickedIds) {
+        // Fetch the chosen rows, preserve similarity order
+        const { rows } = await pool.query(
+          `SELECT id, image_b64, media_type, lesson, outcome FROM trade_memory WHERE id = ANY($1)`,
+          [pickedIds]
+        );
+        memImages = pickedIds.map(id => rows.find(r => r.id === id)).filter(Boolean);
+      } else {
+        // Fallback: most recent screenshots (no Voyage key or no embeddings yet)
+        const { rows } = await pool.query(
+          `SELECT image_b64, media_type, lesson, outcome FROM trade_memory
+           WHERE image_b64 IS NOT NULL ORDER BY created_at DESC LIMIT $1`,
+          [MEMORY_IMAGES]
+        );
+        memImages = rows;
+      }
     }
   } catch (err) {
     console.error('Memory load error:', err.message);

@@ -303,7 +303,11 @@
     <div class="card">
       <div class="card-header">
         <h2>📚 База памяти</h2>
-        <button class="btn btn-outline" id="mem-refresh-btn">↻ Обновить</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="msg" id="mem-reindex-msg" style="font-size:11px"></span>
+          <button class="btn btn-outline" id="mem-reindex-btn" title="Пересчитать визуальные embeddings для записей без них">⚡ Переиндексировать</button>
+          <button class="btn btn-outline" id="mem-refresh-btn">↻ Обновить</button>
+        </div>
       </div>
       <div class="card-body" style="padding:0">
         <div id="mem-list-container">
@@ -688,6 +692,35 @@
   }
 
   document.getElementById('mem-refresh-btn').addEventListener('click', loadMemory);
+
+  document.getElementById('mem-reindex-btn').addEventListener('click', async () => {
+    const msg = document.getElementById('mem-reindex-msg');
+    const btn = document.getElementById('mem-reindex-btn');
+    btn.disabled = true;
+    btn.textContent = 'Считаю...';
+    msg.className = 'msg';
+    msg.textContent = '';
+    try {
+      const res = await fetch('/admin/memory/reindex', {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPassword }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        msg.className = 'msg ok';
+        msg.textContent = `✅ Обработано ${data.reindexed}/${data.total}`;
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + (data.error || 'Ошибка');
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '❌ ' + err.message;
+    }
+    btn.disabled = false;
+    btn.textContent = '⚡ Переиндексировать';
+    setTimeout(() => { msg.textContent = ''; }, 6000);
+  });
 
   // ─── Utils ──────────────────────────────────────────────────────────────────
 
