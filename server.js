@@ -35,6 +35,7 @@ Choose the most probable scenario considering the global trend.
 
 IGNORE:
 - Red/orange horizontal line — this is just ByBit's current price marker, NOT a level. Never mention it.
+- Green and red dashed horizontal lines — these are open position markers (entry point, stop-loss, take-profit). They are NOT support/resistance levels. Never mention or analyze them.
 - Any indicators: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, stochastic, etc. They don't exist.
 
 Two response modes:
@@ -77,6 +78,7 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 
 ИГНОРИРОВАТЬ:
 - Красная/оранжевая горизонтальная линия на графике — это просто маркер текущей цены ByBit, НЕ уровень, НЕ сопротивление, НЕ поддержка. Не упоминать её вообще.
+- Зелёные и красные пунктирные горизонтальные линии — это маркеры открытой позиции (точка входа, стоп-лосс, тейк-профит). НЕ являются уровнями поддержки/сопротивления. Не упоминать и не анализировать их.
 - Любые индикаторы: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, стохастик и другие. Они не существуют.
 
 Есть два режима ответа:
