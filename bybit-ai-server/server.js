@@ -55,6 +55,11 @@ For each level or line from drawings MANDATORY evaluate two scenarios:
 - BOUNCE: is there price reaction, weakness at level, absorption — how likely?
 Choose the most probable scenario considering the global trend.
 
+GLOBAL TREND TAKES PRIORITY over a local drawn line:
+- A small ascending line/squeeze WITHIN a downtrend (especially after a sharp drop, under resistance) is most often a BEAR FLAG — continuation DOWN, not a bullish breakout. Symmetrically, a descending squeeze in an uptrend is usually a bull flag.
+- Do NOT call a setup "bullish" just because there's a local ascending line. First ask: does breaking this line align with the global trend? A local pattern against the global trend is a counter-trend setup — low probability; the trend-continuation scenario is the default.
+- Use the local line for entry timing, but derive trade direction from the global trend.
+
 IGNORE:
 - Red/orange horizontal line — this is just ByBit's current price marker, NOT a level. Never mention it.
 - Green and red dashed horizontal lines — these are open position markers (entry point, stop-loss, take-profit). They are NOT support/resistance levels. Never mention or analyze them.
@@ -75,7 +80,7 @@ Success probability: X%
 🛑 Stop: [level] (-X%)
 ⚖️ R:R = 1:[ratio] — [Excellent / Good / Acceptable / Poor] (min. norm 1:3)
 
-If you reject the chosen direction SPECIFICALLY BECAUSE the opposite scenario is likely, always add a final line hinting at the other direction. E.g.: "↩️ Setup is bullish (ascending line squeezing into resistance, breakout up likely) — consider LONG, not short." This helps a user who pressed the wrong button.
+If you reject the chosen direction SPECIFICALLY BECAUSE the opposite scenario is likely, add a final line hinting at the other direction. E.g.: "↩️ Setup leans with the trend — consider LONG, not short." BUT only suggest the opposite direction if it aligns with the global trend and structure. Never suggest a counter-trend entry just because of a local line.
 
 PERCENTAGE RULES (mandatory):
 - ALL percentages calculated FROM entry price only, never from previous target
@@ -119,6 +124,11 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 - Общее направление (восходящий / нисходящий / боковик)
 - Структура рынка: старшие максимумы/минимумы, куда идёт цена глобально
 - Торговля против тренда — повышенный риск, это должно снижать вероятность отработки
+
+ГЛОБАЛЬНЫЙ ТРЕНД ИМЕЕТ ПРИОРИТЕТ над локальной нарисованной линией:
+- Маленькая восходящая наклонка/поджатие ВНУТРИ нисходящего тренда (особенно после резкого пролива и под сопротивлением) — это чаще всего МЕДВЕЖИЙ ФЛАГ, то есть продолжение ВНИЗ, а НЕ бычий пробой. Симметрично: нисходящее поджатие в восходящем тренде — чаще бычий флаг.
+- НЕ называй сетап «бычьим» только потому, что есть локальная восходящая линия. Сначала спроси себя: согласуется ли пробой этой линии с глобальным трендом? Если локальный паттерн направлен ПРОТИВ глобального тренда — это контр-трендовый сетап, низкая вероятность, и по умолчанию сценарий продолжения тренда вероятнее.
+- Локальную линию используй для тайминга входа, но направление сделки определяй по глобальному тренду.
 
 ПРАВИЛА ФОРМАЦИЙ (применяй при оценке сетапа):
 
@@ -184,7 +194,7 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 Либо ✅ Входи сейчас — либо ❌ Не входи в этот сетап. Ответ должен работать прямо сейчас.
 Если момент плохой — пиши ❌ Не входи с причиной, без советов ждать.
 
-Если отклоняешь направление ИМЕННО ПОТОМУ, что вероятен сценарий в противоположную сторону — обязательно добавь последней строкой подсказку про другое направление. Например: "↩️ Сетап бычий (наклонка поджимается к сопротивлению, вероятен пробой вверх) — рассмотри ЛОНГ, а не шорт." Это помогает пользователю, который нажал не ту кнопку.
+Если отклоняешь направление ИМЕННО ПОТОМУ, что вероятен сценарий в противоположную сторону — добавь последней строкой подсказку про другое направление. Например: "↩️ Сетап скорее в сторону тренда — рассмотри ЛОНГ, а не шорт." НО предлагай противоположное направление ТОЛЬКО если оно согласуется с глобальным трендом и структурой. Не предлагай контр-трендовый вход только из-за локальной наклонки.
 
 Все проценты рассчитывай строго от значения "Вход". Сначала определи Вход, затем считай.
 
