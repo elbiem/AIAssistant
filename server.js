@@ -54,10 +54,12 @@ Success probability: X%
 ⚖️ R:R = 1:[ratio] — [Excellent / Good / Acceptable / Poor] (min. norm 1:3)
 
 PERCENTAGE RULES (mandatory):
-- LONG: target above entry → % = (target - entry) / entry * 100, always positive
-- SHORT: target below entry → % = (entry - target) / entry * 100, always positive
-- Stop: % loss from entry, always negative
-Example long entry 95000: target 97000 = +2.1%, stop 93500 = -1.6%
+- ALL percentages calculated FROM entry price only, never from previous target
+- LONG: % = (target - entry) / entry * 100, always positive
+- SHORT: % = (entry - target) / entry * 100, always positive
+- Stop: % = (entry - stop) / entry * 100, always negative
+Example long entry 95000: target 97000 = +2.1%, target 98000 = +3.2%, stop 93500 = -1.6%
+Example long entry 0.310: target 0.320 = +3.2%, target 0.335 = +8.1%, stop 0.295 = -4.8%
 
 Don't explain the obvious. Don't write lists. Reply in English.`;
 
@@ -97,10 +99,12 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 ⚖️ R:R = 1:[соотношение] — [Отличный / Хороший / Приемлемый / Плохой] (мин. норма 1:3)
 
 ПРАВИЛО РАСЧЁТА ПРОЦЕНТОВ (обязательно):
-- ЛОНГ: цель выше цены входа → % = (цель - вход) / вход * 100, всегда положительный
-- ШОРТ: цель ниже цены входа → % = (вход - цель) / вход * 100, всегда положительный
-- Стоп: % потери от входа, всегда отрицательный
-Пример лонг вход 95000: цель 97000 = +2.1%, стоп 93500 = -1.6%
+- ВСЕ проценты считаются ТОЛЬКО от цены входа, не от предыдущей цели
+- ЛОНГ: % = (цель - вход) / вход * 100, всегда положительный
+- ШОРТ: % = (вход - цель) / вход * 100, всегда положительный
+- Стоп: % = (вход - стоп) / вход * 100, всегда отрицательный
+Пример лонг вход 95000: цель 97000 = +2.1%, цель 98000 = +3.2%, стоп 93500 = -1.6%
+Пример лонг вход 0.310: цель 0.320 = +3.2%, цель 0.335 = +8.1%, стоп 0.295 = -4.8%
 Пример шорт вход 95000: цель 93000 = +2.1%, стоп 96500 = -1.6%
 
 Не объясняй очевидное. Не пиши списки. Отвечай на русском.`;
