@@ -255,6 +255,62 @@
       </div>
     </div>
 
+    <!-- Memory: add -->
+    <div class="card">
+      <div class="card-header">
+        <h2>🧠 Память сделок — добавить</h2>
+      </div>
+      <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+        <div class="form-row" style="align-items:flex-start">
+          <div class="form-group" style="flex:0 0 auto">
+            <label>Скриншот сделки</label>
+            <input type="file" id="mem-file" accept="image/*">
+            <img id="mem-preview" style="display:none;max-width:240px;border-radius:8px;border:1px solid #2d3561;margin-top:8px">
+          </div>
+          <div class="form-group" style="flex:2">
+            <label>Что произошло (описание)</label>
+            <textarea id="mem-desc" rows="4" placeholder="Напр.: вошёл в лонг от наклонной поддержки на 3-м касании, цена отскочила, забрал +2%. Сработало потому что был по тренду." style="background:#0d1117;border:1px solid #2d3561;border-radius:8px;color:#e2e8f0;font-family:inherit;font-size:13px;padding:10px 12px;outline:none;resize:vertical"></textarea>
+          </div>
+          <div class="form-group" style="flex:0 0 140px">
+            <label>Итог</label>
+            <select id="mem-outcome" style="background:#0d1117;border:1px solid #2d3561;border-radius:8px;color:#e2e8f0;font-family:inherit;font-size:13px;padding:10px 12px;outline:none">
+              <option value="">—</option>
+              <option value="прибыль">✅ Прибыль</option>
+              <option value="убыток">❌ Убыток</option>
+              <option value="в ноль">➖ В ноль</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn btn-outline" id="mem-analyze-btn">🔍 Проанализировать</button>
+          <div class="msg" id="mem-msg" style="flex:1"></div>
+        </div>
+
+        <!-- Draft review (hidden until analyzed) -->
+        <div id="mem-draft" style="display:none;flex-direction:column;gap:8px;border-top:1px solid #1f2d50;padding-top:12px">
+          <label style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Урок (проверь и при нужде поправь перед сохранением)</label>
+          <textarea id="mem-lesson" rows="5" style="background:#0d1117;border:1px solid #6366f1;border-radius:8px;color:#e2e8f0;font-family:inherit;font-size:13px;padding:10px 12px;outline:none;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" id="mem-save-btn">💾 Сохранить в память</button>
+            <button class="btn btn-outline" id="mem-cancel-btn">Отмена</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory: list -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📚 База памяти</h2>
+        <button class="btn btn-outline" id="mem-refresh-btn">↻ Обновить</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="mem-list-container">
+          <div class="empty-state">Загрузка...</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -294,6 +350,7 @@
       document.getElementById('dashboard').style.display = '';
       document.getElementById('logout-btn').style.display = '';
       loadUIDs();
+      loadMemory();
     } else {
       msg.className = 'msg err';
       msg.textContent = '❌ Неверный пароль';
@@ -437,6 +494,173 @@
   });
 
   document.getElementById('refresh-btn').addEventListener('click', loadUIDs);
+
+  // ─── Memory ─────────────────────────────────────────────────────────────────
+
+  let memImageData = null; // data URL of selected screenshot
+
+  document.getElementById('mem-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      memImageData = reader.result;
+      const preview = document.getElementById('mem-preview');
+      preview.src = memImageData;
+      preview.style.display = '';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById('mem-analyze-btn').addEventListener('click', async () => {
+    const desc = document.getElementById('mem-desc').value.trim();
+    const outcome = document.getElementById('mem-outcome').value;
+    const msg = document.getElementById('mem-msg');
+    const btn = document.getElementById('mem-analyze-btn');
+
+    if (!memImageData) { msg.className = 'msg err'; msg.textContent = '❌ Прикрепи скриншот сделки'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Анализирую...';
+    msg.className = 'msg';
+    msg.textContent = 'ИИ изучает сделку, это займёт несколько секунд...';
+
+    try {
+      const res = await fetch('/admin/memory/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+        body: JSON.stringify({ imageBase64: memImageData, description: desc, outcome })
+      });
+      const data = await res.json();
+      if (res.ok && data.lesson) {
+        document.getElementById('mem-lesson').value = data.lesson;
+        document.getElementById('mem-draft').style.display = 'flex';
+        msg.className = 'msg ok';
+        msg.textContent = '✅ Проверь урок ниже и сохрани';
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + (data.error || 'Ошибка анализа');
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '❌ ' + err.message;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🔍 Проанализировать';
+  });
+
+  document.getElementById('mem-save-btn').addEventListener('click', async () => {
+    const desc = document.getElementById('mem-desc').value.trim();
+    const outcome = document.getElementById('mem-outcome').value;
+    const lesson = document.getElementById('mem-lesson').value.trim();
+    const msg = document.getElementById('mem-msg');
+    const btn = document.getElementById('mem-save-btn');
+
+    if (!lesson) { msg.className = 'msg err'; msg.textContent = '❌ Урок пустой'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю...';
+
+    try {
+      const res = await fetch('/admin/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+        body: JSON.stringify({ imageBase64: memImageData, description: desc, lesson, outcome })
+      });
+      const data = await res.json();
+      if (data.success) {
+        msg.className = 'msg ok';
+        msg.textContent = '✅ Сохранено в память';
+        resetMemForm();
+        loadMemory();
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + (data.error || 'Ошибка');
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '❌ ' + err.message;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '💾 Сохранить в память';
+  });
+
+  document.getElementById('mem-cancel-btn').addEventListener('click', resetMemForm);
+
+  function resetMemForm() {
+    memImageData = null;
+    document.getElementById('mem-file').value = '';
+    document.getElementById('mem-desc').value = '';
+    document.getElementById('mem-outcome').value = '';
+    document.getElementById('mem-lesson').value = '';
+    document.getElementById('mem-preview').style.display = 'none';
+    document.getElementById('mem-draft').style.display = 'none';
+  }
+
+  async function loadMemory() {
+    try {
+      const res = await fetch('/admin/memory', { headers: { 'x-admin-password': adminPassword } });
+      const rows = await res.json();
+      renderMemory(rows);
+    } catch (err) {
+      document.getElementById('mem-list-container').innerHTML =
+        `<div class="empty-state">Ошибка загрузки: ${err.message}</div>`;
+    }
+  }
+
+  function renderMemory(rows) {
+    if (!rows.length) {
+      document.getElementById('mem-list-container').innerHTML =
+        '<div class="empty-state">Память пуста — добавь первую сделку выше</div>';
+      return;
+    }
+    const outcomeBadge = o =>
+      o === 'прибыль' ? '<span class="badge">✅ прибыль</span>'
+      : o === 'убыток' ? '<span class="badge" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.25);color:#ef4444">❌ убыток</span>'
+      : o === 'в ноль' ? '<span class="badge" style="background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.25);color:#94a3b8">➖ в ноль</span>'
+      : '';
+
+    const cards = rows.map(r => {
+      const date = new Date(r.created_at).toLocaleString('ru', {
+        day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+      const img = r.has_image
+        ? `<img src="/admin/memory/${r.id}/image?password=${encodeURIComponent(adminPassword)}" style="width:120px;height:auto;border-radius:8px;border:1px solid #2d3561;flex-shrink:0">`
+        : '';
+      return `
+        <div style="display:flex;gap:14px;padding:16px;border-bottom:1px solid #1a2240">
+          ${img}
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:center;gap:8px">
+              ${outcomeBadge(r.outcome)}
+              <span class="date-cell">${date}</span>
+            </div>
+            <div style="font-size:13px;color:#e2e8f0;line-height:1.5">${escHtml(r.lesson)}</div>
+            ${r.description ? `<div style="font-size:12px;color:#64748b">${escHtml(r.description)}</div>` : ''}
+          </div>
+          <button class="btn btn-danger" style="align-self:flex-start" onclick="removeMemory(${r.id})">Удалить</button>
+        </div>`;
+    }).join('');
+
+    document.getElementById('mem-list-container').innerHTML = cards;
+  }
+
+  async function removeMemory(id) {
+    if (!confirm('Удалить эту запись из памяти?')) return;
+    try {
+      await fetch(`/admin/memory/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': adminPassword }
+      });
+      loadMemory();
+    } catch (err) {
+      alert('Ошибка: ' + err.message);
+    }
+  }
+
+  document.getElementById('mem-refresh-btn').addEventListener('click', loadMemory);
 
   // ─── Utils ──────────────────────────────────────────────────────────────────
 

@@ -4,8 +4,8 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -13,10 +13,18 @@ const ADMIN_PASSWORD    = process.env.ADMIN_PASSWORD || 'changeme123';
 const ACCESS_KEY        = process.env.ACCESS_KEY || 'bybit-ext-key';
 const PORT              = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+const DEMO_UID          = process.env.DEMO_UID || '1000000';
 
-const CLAUDE_API_URL  = 'https://api.anthropic.com/v1/messages';
-const MODEL_FAST      = 'claude-haiku-4-5-20251001';  // auto + chat
-const MODEL_FULL      = 'claude-sonnet-4-6';           // long/short analysis
+const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+// Opus for the critical long/short analysis; faster/cheaper model for auto + chat.
+// Override with env vars if you want Opus everywhere (set MODEL_FAST=claude-opus-4-8).
+const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-opus-4-8';
+const MODEL_FAST = process.env.MODEL_FAST || 'claude-sonnet-4-6';
+
+// How many past-trade screenshots from memory to attach during deep analysis (cost driver).
+const MEMORY_IMAGES = parseInt(process.env.MEMORY_IMAGES || '2', 10);
+// How many memory lessons (text) to inject into the system prompt.
+const MEMORY_LESSONS = parseInt(process.env.MEMORY_LESSONS || '30', 10);
 
 const SYSTEM_PROMPT_EN = `You are an experienced crypto trader. You analyze ONLY:
 1. Candles (patterns, structure, impulses, pullbacks, candle volume)
@@ -35,6 +43,7 @@ Choose the most probable scenario considering the global trend.
 
 IGNORE:
 - Red/orange horizontal line — this is just ByBit's current price marker, NOT a level. Never mention it.
+- Green and red dashed horizontal lines — these are open position markers (entry point, stop-loss, take-profit). They are NOT support/resistance levels. Never mention or analyze them.
 - Any indicators: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, stochastic, etc. They don't exist.
 
 Two response modes:
@@ -53,30 +62,82 @@ Success probability: X%
 ⚖️ R:R = 1:[ratio] — [Excellent / Good / Acceptable / Poor] (min. norm 1:3)
 
 PERCENTAGE RULES (mandatory):
-- LONG: target above entry → % = (target - entry) / entry * 100, always positive
-- SHORT: target below entry → % = (entry - target) / entry * 100, always positive
-- Stop: % loss from entry, always negative
-Example long entry 95000: target 97000 = +2.1%, stop 93500 = -1.6%
+- ALL percentages calculated FROM entry price only, never from previous target
+- LONG: % = (target - entry) / entry * 100, always positive
+- SHORT: % = (entry - target) / entry * 100, always positive
+- Stop: % = (entry - stop) / entry * 100, always negative
+Example long entry 95000: target 97000 = +2.1%, target 98000 = +3.2%, stop 93500 = -1.6%
+Example long entry 0.310: target 0.320 = +3.2%, target 0.335 = +8.1%, stop 0.295 = -4.8%
 
 Don't explain the obvious. Don't write lists. Reply in English.`;
 
 const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Анализируешь ТОЛЬКО:
 1. Свечи (паттерны, структура, импульсы, откаты, объём свечей)
 2. Объём (подтверждение движений, слабость/сила импульса, аномальные всплески)
-3. Чертежи пользователя — СИНИЕ линии (линии тренда, наклонки, уровни поддержки/сопротивления, треугольники, клинья, каналы, зоны, проторговки)
+3. Чертежи пользователя — СИНИЕ линии (линии тренда, наклонки, уровни поддержки/сопротивления, треугольники, клинья, каналы, зоны, проторговки). Если синих линий на графике нет — не упоминай их вообще, не придумывай.
+
+ТАЙМФРЕЙМ — определяй из контекста запроса и адаптируй анализ:
+
+Скальпинг (1м, 3м, 5м, 15м):
+- Анализируй только последние 10–20 свечей, моментум и объём прямо сейчас
+- Стоп: 0.3–0.8% от входа. Если ближайший уровень дальше — вход не рекомендуй
+- R:R минимум 1:2 (для скальпинга норма, не 1:3)
+- Цели реалистичные для скальпа: 0.5–2%
+- Глобальную структуру упоминай только если она прямо влияет на сетап
+
+Интрадей (30м, 1ч, 4ч):
+- Баланс структуры и моментума, стоп 1–2%, R:R минимум 1:3
+
+Свинг (1д и выше):
+- Фокус на структуру рынка, ключевые уровни, стоп 2–5%
 
 ОБЯЗАТЕЛЬНО перед анализом определи глобальный тренд по всему видимому на графике:
 - Общее направление (восходящий / нисходящий / боковик)
 - Структура рынка: старшие максимумы/минимумы, куда идёт цена глобально
 - Торговля против тренда — повышенный риск, это должно снижать вероятность отработки
 
-По каждому уровню или линии из чертежей ОБЯЗАТЕЛЬНО оценивай два сценария:
-- ПРОБОЙ: есть ли импульс, объём, закрытие свечи за уровнем — насколько вероятен пробой?
-- ОТСКОК: есть ли реакция цены, слабость у уровня, поглощение — насколько вероятен отскок?
+ПРАВИЛА ФОРМАЦИЙ (применяй при оценке сетапа):
+
+Горизонтальные уровни:
+- ПРОБОЙ уровня — считается качественным если было 2 подхода к уровню и на третий происходит пробитие, ИЛИ второй подход плавный с проторговкой прямо перед уровнем. Один подход и резкий пробой — слабый сетап.
+- ОТСКОК от уровня — качественный если подход к уровню импульсный (быстрые свечи с объёмом). Вялый подход к уровню — отскок менее вероятен.
+
+Наклонные линии (трендлайны):
+- ОТСКОК от наклонки — брать ТОЛЬКО третье касание при наличии видимой реакции цены от линии. Второе и четвёртое касания — не брать.
+- ПРОБОЙ наклонки — качественный если есть три касания и четвёртый подход (на четвёртом чаще пробой), ИЛИ третье касание это проторговка у линии.
+
+Треугольники:
+- Треугольник валиден только если он "красивый": внутри минимум три последовательных хая и необновлённый лой (для нисходящего — три лоя и необновлённый хай). Хаотичные движения внутри — не треугольник.
+- Пробой треугольника: входить по факту пробоя с объёмом ИЛИ на ретесте сломанной границы.
+
+Ретесты (для всех формаций):
+- После пробоя уровня или линии цена часто возвращается для ретеста — это второй вход, часто более безопасный чем вход по факту пробоя.
+- Если ретест уже произошёл и цена оттолкнулась — текущий момент может быть поздним для входа.
+
+ПОЛОЖЕНИЕ ЦЕНЫ ОТНОСИТЕЛЬНО ЛИНИИ (критично — определяй до выводов):
+- Сначала чётко определи: цена сейчас ВЫШЕ линии или НИЖЕ линии?
+- Была ли линия пробита? Если цена пробила восходящую наклонку вниз и торгуется под ней — это уже НЕ поддержка, а сломанная линия. Ретест снизу = сигнал на продолжение вниз, а не отскок вверх.
+- Не называй линию "поддержка держит", если цена уже под ней. Пробитая поддержка становится сопротивлением, и наоборот.
+
+ТЕКУЩАЯ СИТУАЦИЯ — смотри на последние свечи:
+- Если ретест уровня уже произошёл на видимом графике — говори об этом, не советуй ждать то что уже случилось
+- Если цена уже на уровне или только что оттолкнулась — анализируй текущий момент, а не гипотетический будущий
+
+По каждой синей линии из чертежей — СНАЧАЛА посчитай касания:
+- Сколько раз цена реально касалась этой линии (хаи/лои/тела свечей)? Назови число.
+- 1 касание = просто линия, не уровень. Не называй её поддержкой/сопротивлением/трендом.
+- 2+ касания = можно рассматривать как уровень.
+- Если цена ушла от линии более чем на 5% без возврата — линия неактуальна для текущего анализа, упомяни это и не строй на ней выводы.
+- Если линия не вписывается в видимую структуру цены — скажи прямо: "линия не соответствует структуре".
+
+Только если линия имеет 2+ касания и актуальна — оценивай два сценария:
+- ПРОБОЙ: есть ли импульс, объём, закрытие свечи за уровнем?
+- ОТСКОК: есть ли реакция цены, слабость у уровня, поглощение?
 Выбирай наиболее вероятный сценарий с учётом глобального тренда.
 
 ИГНОРИРОВАТЬ:
 - Красная/оранжевая горизонтальная линия на графике — это просто маркер текущей цены ByBit, НЕ уровень, НЕ сопротивление, НЕ поддержка. Не упоминать её вообще.
+- Зелёные и красные пунктирные горизонтальные линии — это маркеры открытой позиции (точка входа, стоп-лосс, тейк-профит). НЕ являются уровнями поддержки/сопротивления. Не упоминать и не анализировать их.
 - Любые индикаторы: SMA, EMA, RSI, MACD, Bollinger Bands, ATR, стохастик и другие. Они не существуют.
 
 Есть два режима ответа:
@@ -87,25 +148,34 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 [Опционально: уровень входа или стоп]
 
 РЕЖИМ ЛОНГ/ШОРТ (пользователь указал направление):
-Формат — строго 3-4 строки:
+Формат — строго:
 ✅ Входи / ❌ Не входи / ⚠️ Рискованно — [главная причина]
+Вход: [цена входа]
 Вероятность отработки: X%
 🎯 Цели: [уровень 1] (+X%) → [уровень 2] (+X%)
 🛑 Стоп: [уровень] (-X%)
 ⚖️ R:R = 1:[соотношение] — [Отличный / Хороший / Приемлемый / Плохой] (мин. норма 1:3)
 
+ВАЖНО в режиме лонг/шорт: никогда не советуй "жди ретест" или "подожди лучший момент".
+Либо ✅ Входи сейчас — либо ❌ Не входи в этот сетап. Ответ должен работать прямо сейчас.
+Если момент плохой — пиши ❌ Не входи с причиной, без советов ждать.
+
+Все проценты рассчитывай строго от значения "Вход". Сначала определи Вход, затем считай.
+
 ПРАВИЛО РАСЧЁТА ПРОЦЕНТОВ (обязательно):
-- ЛОНГ: цель выше цены входа → % = (цель - вход) / вход * 100, всегда положительный
-- ШОРТ: цель ниже цены входа → % = (вход - цель) / вход * 100, всегда положительный
-- Стоп: % потери от входа, всегда отрицательный
-Пример лонг вход 95000: цель 97000 = +2.1%, стоп 93500 = -1.6%
+- ВСЕ проценты считаются ТОЛЬКО от цены входа, не от предыдущей цели
+- ЛОНГ: % = (цель - вход) / вход * 100, всегда положительный
+- ШОРТ: % = (вход - цель) / вход * 100, всегда положительный
+- Стоп: % = (вход - стоп) / вход * 100, всегда отрицательный
+Пример лонг вход 95000: цель 97000 = +2.1%, цель 98000 = +3.2%, стоп 93500 = -1.6%
+Пример лонг вход 0.310: цель 0.320 = +3.2%, цель 0.335 = +8.1%, стоп 0.295 = -4.8%
 Пример шорт вход 95000: цель 93000 = +2.1%, стоп 96500 = -1.6%
 
 Не объясняй очевидное. Не пиши списки. Отвечай на русском.`;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.DATABASE_URL ? { rejectUnauthorized: false } : false)
 });
 
 // ─── DB init ─────────────────────────────────────────────────────────────────
@@ -118,7 +188,46 @@ async function initDB() {
       added_at  TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trade_memory (
+      id          SERIAL PRIMARY KEY,
+      image_b64   TEXT,
+      media_type  VARCHAR(30) DEFAULT 'image/jpeg',
+      description TEXT DEFAULT '',
+      lesson      TEXT DEFAULT '',
+      outcome     VARCHAR(20) DEFAULT '',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   console.log('DB ready');
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+// Accepts a data URL or raw base64; returns { data, mediaType }
+function parseImage(input, fallbackType = 'image/jpeg') {
+  if (!input) return { data: null, mediaType: fallbackType };
+  const m = /^data:([^;]+);base64,(.*)$/s.exec(input);
+  if (m) return { data: m[2], mediaType: m[1] };
+  return { data: input, mediaType: fallbackType };
+}
+
+async function callClaude({ model, maxTokens, system, messages }) {
+  const apiRes = await fetch(CLAUDE_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages })
+  });
+  if (!apiRes.ok) {
+    const err = await apiRes.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Claude API error ${apiRes.status}`);
+  }
+  const data = await apiRes.json();
+  return data.content[0].text;
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -142,6 +251,10 @@ app.get('/check', async (req, res) => {
   }
   if (!uid || uid.trim() === '') {
     return res.status(400).json({ authorized: false, error: 'No UID provided' });
+  }
+
+  if (uid.trim() === DEMO_UID) {
+    return res.json({ authorized: true });
   }
 
   try {
@@ -210,13 +323,110 @@ app.delete('/admin/uids/:uid', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Memory: analyze a trade screenshot into a draft lesson (NOT saved) ──────
+
+// POST /admin/memory/draft  { imageBase64, description, outcome }
+app.post('/admin/memory/draft', requireAdmin, async (req, res) => {
+  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'API key not configured on server' });
+
+  const { imageBase64, description, outcome } = req.body;
+  const { data, mediaType } = parseImage(imageBase64);
+  if (!data) return res.status(400).json({ error: 'Нужен скриншот сделки' });
+
+  const memSystem = `Ты — опытный крипто-трейдер и наставник. Пользователь загружает скриншот своей сделки на ByBit и описание того, что произошло.
+Твоя задача — извлечь ОДИН краткий, конкретный, применимый урок (1–3 предложения), который поможет в будущих похожих ситуациях.
+Опиши: какой паттерн/формация была, что сработало или не сработало и почему, какой вывод на будущее.
+Без воды, без общих фраз. На русском.`;
+
+  const content = [
+    { type: 'image', source: { type: 'base64', media_type: mediaType, data } },
+    { type: 'text', text: `Описание сделки: ${description || '(не указано)'}\nИтог: ${outcome || '(не указан)'}\n\nСформулируй краткий урок для будущих сделок.` }
+  ];
+
+  try {
+    const lesson = await callClaude({
+      model: MODEL_DEEP,
+      maxTokens: 300,
+      system: memSystem,
+      messages: [{ role: 'user', content }]
+    });
+    res.json({ lesson });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ─── Memory: save a reviewed memory ──────────────────────────────────────────
+
+// POST /admin/memory  { imageBase64, description, lesson, outcome }
+app.post('/admin/memory', requireAdmin, async (req, res) => {
+  const { imageBase64, description, lesson, outcome } = req.body;
+  const { data, mediaType } = parseImage(imageBase64);
+  if (!lesson || !lesson.trim()) return res.status(400).json({ error: 'Урок не может быть пустым' });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO trade_memory (image_b64, media_type, description, lesson, outcome)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [data, mediaType, description || '', lesson.trim(), outcome || '']
+    );
+    res.json({ success: true, id: rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Memory: list (without heavy image data) ─────────────────────────────────
+
+// GET /admin/memory
+app.get('/admin/memory', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, description, lesson, outcome, created_at,
+              (image_b64 IS NOT NULL) AS has_image
+       FROM trade_memory ORDER BY created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Memory: fetch one image ─────────────────────────────────────────────────
+
+// GET /admin/memory/:id/image?password=...
+app.get('/admin/memory/:id/image', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT image_b64, media_type FROM trade_memory WHERE id = $1', [req.params.id]
+    );
+    if (!rows.length || !rows[0].image_b64) return res.status(404).send('No image');
+    res.set('Content-Type', rows[0].media_type || 'image/jpeg');
+    res.send(Buffer.from(rows[0].image_b64, 'base64'));
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+// ─── Memory: delete ──────────────────────────────────────────────────────────
+
+// DELETE /admin/memory/:id
+app.delete('/admin/memory/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM trade_memory WHERE id = $1', [req.params.id]);
+    res.json({ success: true, deleted: rowCount > 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Analyze endpoint ────────────────────────────────────────────────────────
 // POST /analyze  { uid, key, mode, context, userMessage, history, screenshotBase64 }
 
 app.post('/analyze', async (req, res) => {
   const { uid, key, mode, context, userMessage, history, screenshotBase64, lang } = req.body;
   console.log(`[analyze] uid=${uid} lang=${lang} mode=${mode}`);
-  const systemPrompt = lang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT;
+  let systemPrompt = lang === 'en' ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT;
 
   if (key !== ACCESS_KEY) {
     return res.status(403).json({ error: 'Invalid key' });
@@ -226,15 +436,47 @@ app.post('/analyze', async (req, res) => {
   }
 
   // Verify UID still has access
-  try {
-    const { rows } = await pool.query('SELECT uid FROM allowed_uids WHERE uid = $1', [uid.trim()]);
-    if (rows.length === 0) return res.status(403).json({ error: 'Access denied' });
-  } catch (err) {
-    return res.status(500).json({ error: 'DB error' });
+  if (uid.trim() !== DEMO_UID) {
+    try {
+      const { rows } = await pool.query('SELECT uid FROM allowed_uids WHERE uid = $1', [uid.trim()]);
+      if (rows.length === 0) return res.status(403).json({ error: 'Access denied' });
+    } catch (err) {
+      return res.status(500).json({ error: 'DB error' });
+    }
   }
 
   if (!ANTHROPIC_API_KEY) {
     return res.status(500).json({ error: 'API key not configured on server' });
+  }
+
+  const isDeepMode = (mode === 'long' || mode === 'short');
+
+  // ── Inject trade memory ──────────────────────────────────────────────────
+  let memImages = [];
+  try {
+    if (MEMORY_LESSONS > 0) {
+      const { rows } = await pool.query(
+        'SELECT lesson, outcome FROM trade_memory ORDER BY created_at DESC LIMIT $1',
+        [MEMORY_LESSONS]
+      );
+      if (rows.length) {
+        const lessons = rows
+          .map((r, i) => `${i + 1}. ${r.lesson}${r.outcome ? ` (итог: ${r.outcome})` : ''}`)
+          .join('\n');
+        systemPrompt += `\n\nПАМЯТЬ ПРОШЛЫХ СДЕЛОК (личные уроки трейдера — учитывай их при оценке текущего сетапа):\n${lessons}`;
+      }
+    }
+    // Attach a few reference screenshots only in deep mode (cost control)
+    if (isDeepMode && MEMORY_IMAGES > 0) {
+      const { rows } = await pool.query(
+        `SELECT image_b64, media_type, lesson, outcome FROM trade_memory
+         WHERE image_b64 IS NOT NULL ORDER BY created_at DESC LIMIT $1`,
+        [MEMORY_IMAGES]
+      );
+      memImages = rows;
+    }
+  } catch (err) {
+    console.error('Memory load error:', err.message);
   }
 
   // Build messages
@@ -246,6 +488,16 @@ app.post('/analyze', async (req, res) => {
   }
 
   const currentContent = [];
+
+  // Reference screenshots from memory (clearly labeled as past examples)
+  for (const mem of memImages) {
+    currentContent.push({ type: 'text', text: `📚 Прошлая сделка для контекста${mem.outcome ? ` (${mem.outcome})` : ''}: ${mem.lesson}` });
+    currentContent.push({ type: 'image', source: { type: 'base64', media_type: mem.media_type || 'image/jpeg', data: mem.image_b64 } });
+  }
+  if (memImages.length) {
+    currentContent.push({ type: 'text', text: '⬆️ Выше — примеры прошлых сделок (для контекста). ⬇️ Ниже — ТЕКУЩИЙ график, анализируй именно его:' });
+  }
+
   if (screenshotBase64) {
     currentContent.push({
       type: 'image',
@@ -277,28 +529,12 @@ app.post('/analyze', async (req, res) => {
   currentContent.push({ type: 'text', text: promptText });
   messages.push({ role: 'user', content: currentContent });
 
-  const isDeepMode = (mode === 'long' || mode === 'short');
-  const model     = MODEL_FULL;
+  const model     = isDeepMode ? MODEL_DEEP : MODEL_FAST;
   const maxTokens = isDeepMode ? 400 : 300;
 
   try {
-    const apiRes = await fetch(CLAUDE_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({ model, max_tokens: maxTokens, system: systemPrompt, messages })
-    });
-
-    if (!apiRes.ok) {
-      const err = await apiRes.json().catch(() => ({}));
-      return res.status(502).json({ error: err.error?.message || `Claude API error ${apiRes.status}` });
-    }
-
-    const data = await apiRes.json();
-    res.json({ text: data.content[0].text });
+    const text = await callClaude({ model, maxTokens, system: systemPrompt, messages });
+    res.json({ text });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -307,8 +543,6 @@ app.post('/analyze', async (req, res) => {
 // ─── Health check ─────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
-
-// Admin panel served from public/admin.html via express.static
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
