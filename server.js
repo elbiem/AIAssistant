@@ -16,7 +16,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEMO_UID          = process.env.DEMO_UID || '1000000';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL          = 'claude-sonnet-4-6';
+const MODEL          = 'claude-opus-4-8';
 
 const SYSTEM_PROMPT_EN = `You are an experienced crypto trader. You analyze ONLY:
 1. Candles (patterns, structure, impulses, pullbacks, candle volume)
