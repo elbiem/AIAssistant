@@ -16,9 +16,9 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEMO_UID          = process.env.DEMO_UID || '1000000';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-// Opus for the critical long/short analysis; faster/cheaper model for auto + chat.
-// Override with env vars if you want Opus everywhere (set MODEL_FAST=claude-opus-4-8).
-const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-opus-4-8';
+// Sonnet for all chart analysis — it reads trend/structure more reliably here than
+// Opus did, and matches the (correct) auto-analysis behaviour. Override via env.
+const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-sonnet-4-6';
 const MODEL_FAST = process.env.MODEL_FAST || 'claude-sonnet-4-6';
 
 // How many past-trade screenshots from memory to attach during deep analysis (cost driver).
