@@ -16,15 +16,24 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEMO_UID          = process.env.DEMO_UID || '1000000';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
-// Sonnet for all chart analysis — it reads trend/structure more reliably here than
-// Opus did, and matches the (correct) auto-analysis behaviour. Override via env.
-const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-opus-4-8';
+// Sonnet handles the trade verdict (long/short/auto). Opus is reserved for the one
+// thing it reads clearly better — where price sits relative to a drawn line/level —
+// and runs only as a cheap focused pre-step in deep mode (MODEL_LINE); its reading is
+// fed to the Sonnet verdict as fact. Keeps Opus line-accuracy at near-Sonnet cost.
+const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-sonnet-4-6';
 const MODEL_FAST = process.env.MODEL_FAST || 'claude-sonnet-4-6';
+const MODEL_LINE = process.env.MODEL_LINE || 'claude-opus-4-8';
 
 // How many past-trade screenshots from memory to attach during deep analysis (cost driver).
 const MEMORY_IMAGES = parseInt(process.env.MEMORY_IMAGES || '2', 10);
-// How many memory lessons (text) to inject into the system prompt.
-const MEMORY_LESSONS = parseInt(process.env.MEMORY_LESSONS || '30', 10);
+// How many memory lessons (text) injected into the system prompt — cost driver, every request.
+const MEMORY_LESSONS = parseInt(process.env.MEMORY_LESSONS || '15', 10);
+
+// Optional screenshot downscaling to cut vision-token cost (Opus high-res images are
+// billed per pixel). Falls back to the original image if sharp is unavailable.
+let sharp = null;
+try { sharp = require('sharp'); } catch { console.warn('sharp not installed — images sent at full size'); }
+const MAX_IMG_EDGE = parseInt(process.env.MAX_IMG_EDGE || '1100', 10);
 
 // Voyage AI multimodal embeddings — used for visual similarity search over memory.
 // If VOYAGE_API_KEY is unset, memory falls back to "most recent" screenshots.
@@ -241,6 +250,16 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 НЕ упоминай в ответе примеры из памяти / похожие прошлые сделки и слово "память" — они нужны только для твоего внутреннего рассуждения, пользователь их видеть не должен.
 Не объясняй очевидное. Не пиши списки. Отвечай на русском.`;
 
+// Focused prompt for the Opus line/level reader (deep-mode pre-step). Its output is
+// fed to the Sonnet verdict as authoritative geometry — Opus reads line position best.
+const LINE_READ_SYSTEM = `Ты — эксперт по чтению крипто-графиков. Твоя ЕДИНСТВЕННАЯ задача — точно прочитать геометрию линий и положение цены. НЕ давай торговых советов, НЕ предлагай вход/цели/стоп.
+Ответь кратко, 3–5 строк:
+1. ГЛОБАЛЬНЫЙ ТРЕНД по всему видимому графику: восходящий / нисходящий / боковик.
+2. Для КАЖДОЙ нарисованной (синей) линии: горизонтальный это уровень или наклонная; сколько раз цена её касалась.
+3. ГЛАВНОЕ — у ПРАВОГО края графика (последние свечи): мысленно продли линию туда и определи, тело последней свечи ВЫШЕ или НИЖЕ линии. Скажи однозначно: «цена НАД линией» или «цена ПОД линией».
+4. Пробита ли линия: пробой ТОЛЬКО если тело свечи закрылось за линией с явным отрывом; цена на линии или фитиль-прокол = ТЕСТ, не пробой; сомневаешься — «не пробита (тест)».
+Наклон линии НЕ определяет сторону цены — сторону определяет ТОЛЬКО вертикальное положение свечи у правого края.`;
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_SSL === 'false' ? false : (process.env.DATABASE_URL ? { rejectUnauthorized: false } : false)
@@ -343,7 +362,13 @@ function parseImage(input, fallbackType = 'image/jpeg') {
   return { data: input, mediaType: fallbackType };
 }
 
-async function callClaude({ model, maxTokens, system, messages }) {
+async function callClaude({ model, maxTokens, system, messages, cache = true }) {
+  // Wrap the system prompt in a cacheable block. The big analysis prompt + lessons is
+  // a stable prefix across requests, so prompt caching serves it at ~0.1x cost on
+  // repeat calls within the TTL. Small system prompts simply won't cache (no error).
+  const sys = typeof system === 'string'
+    ? [{ type: 'text', text: system, ...(cache ? { cache_control: { type: 'ephemeral' } } : {}) }]
+    : system;
   const apiRes = await fetch(CLAUDE_API_URL, {
     method: 'POST',
     headers: {
@@ -351,7 +376,7 @@ async function callClaude({ model, maxTokens, system, messages }) {
       'x-api-key': ANTHROPIC_API_KEY,
       'anthropic-version': '2023-06-01'
     },
-    body: JSON.stringify({ model, max_tokens: maxTokens, system, messages })
+    body: JSON.stringify({ model, max_tokens: maxTokens, system: sys, messages })
   });
   if (!apiRes.ok) {
     const err = await apiRes.json().catch(() => ({}));
@@ -408,6 +433,23 @@ function cosineSim(a, b) {
 function toDataUrl(b64, mediaType) {
   if (!b64) return null;
   return `data:${mediaType || 'image/jpeg'};base64,${b64}`;
+}
+
+// Downscale a raw-base64 image to MAX_IMG_EDGE on the long edge and re-encode as JPEG
+// to cut vision-token cost. Returns {data, mediaType}; on any failure or if sharp is
+// unavailable, returns the original bytes unchanged.
+async function downscaleB64(b64, mediaType) {
+  if (!sharp || !b64) return { data: b64, mediaType: mediaType || 'image/jpeg' };
+  try {
+    const out = await sharp(Buffer.from(b64, 'base64'))
+      .resize({ width: MAX_IMG_EDGE, height: MAX_IMG_EDGE, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+    return { data: out.toString('base64'), mediaType: 'image/jpeg' };
+  } catch (err) {
+    console.error('Downscale failed:', err.message);
+    return { data: b64, mediaType: mediaType || 'image/jpeg' };
+  }
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
@@ -713,6 +755,10 @@ app.post('/analyze', async (req, res) => {
 
   const isDeepMode = (mode === 'long' || mode === 'short');
 
+  // Downscale the current chart once; reuse the smaller copy everywhere (classify,
+  // line read, verdict, log) to cut vision-token cost.
+  const shot = screenshotBase64 ? await downscaleB64(screenshotBase64, 'image/jpeg') : null;
+
   // ── Inject trade memory ──────────────────────────────────────────────────
   let memImages = [];
   let matchedInfo = [];
@@ -741,7 +787,7 @@ app.post('/analyze', async (req, res) => {
       // Classify the current chart only to prefer the same formation; the
       // direction filter comes from the button, not from the classifier.
       const tag = await classifyFormation([
-        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 } },
+        { type: 'image', source: { type: 'base64', media_type: shot.mediaType, data: shot.data } },
         { type: 'text', text: 'Классифицируй этот график.' }
       ]);
       detectedTag = tag;
@@ -768,7 +814,7 @@ app.post('/analyze', async (req, res) => {
       await pool.query(
         `INSERT INTO analysis_log (mode, context, query_image, query_media, matched, detected)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [mode, context || '', screenshotBase64 || null, 'image/jpeg', JSON.stringify(matchedInfo),
+        [mode, context || '', shot ? shot.data : null, shot ? shot.mediaType : 'image/jpeg', JSON.stringify(matchedInfo),
          detectedTag ? `${detectedTag.pattern}/${detectedTag.direction}` : null]
       );
       await pool.query(
@@ -793,6 +839,24 @@ app.post('/analyze', async (req, res) => {
     }
   }
 
+  // Deep mode: a focused Opus pass reads line/level geometry on the current chart
+  // (its strength). Its reading is injected into the Sonnet verdict as fact.
+  let lineReading = null;
+  if (isDeepMode && shot) {
+    try {
+      lineReading = await callClaude({
+        model: MODEL_LINE, maxTokens: 220, cache: false, system: LINE_READ_SYSTEM,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: shot.mediaType, data: shot.data } },
+          { type: 'text', text: 'Прочитай линии и положение цены у правого края.' }
+        ] }]
+      });
+      console.log(`[analyze] line read: ${(lineReading || '').replace(/\s+/g, ' ').slice(0, 140)}`);
+    } catch (err) {
+      console.error('Line read failed:', err.message);
+    }
+  }
+
   const currentContent = [];
 
   // Reference screenshots from memory. These charts carry the trader's own
@@ -800,8 +864,9 @@ app.post('/analyze', async (req, res) => {
   // 🔴 = trade EXIT (close) point, green horizontal/diagonal lines = the levels
   // and trendlines the trade was built on, % in the title = the result.
   for (const mem of memImages) {
+    const memShot = await downscaleB64(mem.image_b64, mem.media_type);
     currentContent.push({ type: 'text', text: `📚 Похожая формация из прошлого${mem.outcome ? ` — итог: ${mem.outcome}` : ''}. Урок: ${mem.lesson}. На картинке ниже разметка трейдера — изучи её:` });
-    currentContent.push({ type: 'image', source: { type: 'base64', media_type: mem.media_type || 'image/jpeg', data: mem.image_b64 } });
+    currentContent.push({ type: 'image', source: { type: 'base64', media_type: memShot.mediaType, data: memShot.data } });
   }
   if (memImages.length) {
     currentContent.push({ type: 'text', text: `⬆️ Выше — справочные скриншоты прошлых сделок. Как читать разметку на них:
@@ -813,10 +878,14 @@ app.post('/analyze', async (req, res) => {
 ⬇️ Ниже — ТЕКУЩИЙ график. Оцени его НЕЗАВИСИМО: сначала глобальный тренд (приоритет!), затем структура. Память подсказывает ГДЕ ставить вход/выход в похожей формации, но НЕ диктует направление — если текущий тренд противоположен примеру, не копируй его направление:` });
   }
 
-  if (screenshotBase64) {
+  if (lineReading) {
+    currentContent.push({ type: 'text', text: `🔎 ТОЧНЫЙ РАЗБОР ЛИНИЙ (от модели-эксперта по зрению — считай это ФАКТОМ о положении цены относительно линий и о пробое; НЕ переопределяй его собственным чтением картинки):\n${lineReading}` });
+  }
+
+  if (shot) {
     currentContent.push({
       type: 'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 }
+      source: { type: 'base64', media_type: shot.mediaType, data: shot.data }
     });
   }
 
