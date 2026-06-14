@@ -826,7 +826,12 @@ app.post('/analyze', async (req, res) => {
     const text = await callClaude({ model, maxTokens, system: systemPrompt, messages });
     res.json({ text });
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    // Log the real error for debugging, but never leak it (billing/API details) to users
+    console.error('Analyze failed:', err.message);
+    const friendly = lang === 'en'
+      ? '⚠️ Service is temporarily unavailable. Please try again in a couple of minutes.'
+      : '⚠️ Сервис временно недоступен. Попробуйте ещё раз через пару минут.';
+    res.status(502).json({ error: friendly });
   }
 });
 
