@@ -236,8 +236,10 @@ async function initDB() {
       created_at  TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  // Add embedding column if the table predates it
+  // Columns added after the table first shipped
   await pool.query(`ALTER TABLE trade_memory ADD COLUMN IF NOT EXISTS embedding TEXT`);
+  await pool.query(`ALTER TABLE trade_memory ADD COLUMN IF NOT EXISTS pattern VARCHAR(40)`);
+  await pool.query(`ALTER TABLE trade_memory ADD COLUMN IF NOT EXISTS direction VARCHAR(10)`);
   // Log of deep analyses — which chart was sent and which memories were matched
   await pool.query(`
     CREATE TABLE IF NOT EXISTS analysis_log (
@@ -247,10 +249,53 @@ async function initDB() {
       query_image TEXT,
       query_media VARCHAR(30) DEFAULT 'image/jpeg',
       matched     TEXT,
+      detected    VARCHAR(60),
       created_at  TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE analysis_log ADD COLUMN IF NOT EXISTS detected VARCHAR(60)`);
   console.log('DB ready');
+}
+
+// Formation taxonomy used for memory retrieval (current chart is matched to
+// past trades of the SAME pattern type — general image embeddings can't tell
+// formations apart, but classifying into these buckets is reliable).
+const PATTERNS = [
+  'пробой_уровня',       // horizontal level breakout
+  'отскок_от_уровня',    // horizontal level bounce
+  'пробой_наклонной',    // trendline break
+  'отскок_от_наклонной', // trendline bounce
+  'треугольник',         // triangle
+  'флаг',                // flag / squeeze
+  'боковик',             // range / consolidation
+  'нет_паттерна'         // no clear formation
+];
+const CLASSIFY_MODEL = process.env.CLASSIFY_MODEL || 'claude-haiku-4-5-20251001';
+
+const CLASSIFY_SYSTEM = `Ты классифицируешь крипто-график по типу формации. Отвечай СТРОГО одним JSON без пояснений:
+{"pattern":"<один из: ${PATTERNS.join(' | ')}>","direction":"<лонг | шорт | нейтрально>"}
+- pattern — главная торгуемая формация прямо сейчас у правого края графика.
+- direction — в какую сторону смотрит сетап по глобальному тренду (лонг/шорт), либо нейтрально если непонятно.
+- Если чёткой формации нет — pattern "нет_паттерна".`;
+
+// Classify a chart (image and/or text) into {pattern, direction}. Returns null on failure.
+async function classifyFormation(content) {
+  if (!ANTHROPIC_API_KEY) return null;
+  try {
+    const raw = await callClaude({
+      model: CLASSIFY_MODEL, maxTokens: 60, system: CLASSIFY_SYSTEM,
+      messages: [{ role: 'user', content }]
+    });
+    const m = raw.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const obj = JSON.parse(m[0]);
+    const pattern = PATTERNS.includes(obj.pattern) ? obj.pattern : 'нет_паттерна';
+    const direction = ['лонг', 'шорт', 'нейтрально'].includes(obj.direction) ? obj.direction : 'нейтрально';
+    return { pattern, direction };
+  } catch (err) {
+    console.error('Classify failed:', err.message);
+    return null;
+  }
 }
 
 // Keep only the most recent N analysis-log rows
@@ -467,40 +512,43 @@ app.post('/admin/memory', requireAdmin, async (req, res) => {
   const { data, mediaType } = parseImage(imageBase64);
   if (!lesson || !lesson.trim()) return res.status(400).json({ error: 'Урок не может быть пустым' });
 
-  // Generate visual embedding for similarity search (null if Voyage not configured)
-  let embedding = null;
-  if (data) {
-    const vec = await voyageEmbedImage(toDataUrl(data, mediaType), 'document');
-    if (vec) embedding = JSON.stringify(vec);
-  }
+  // Classify the trade into a formation tag (from the image + the text we have)
+  let pattern = null, direction = null;
+  const classifyContent = [];
+  if (data) classifyContent.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data } });
+  classifyContent.push({ type: 'text', text: `Описание: ${description || ''}\nУрок: ${lesson}` });
+  const tag = await classifyFormation(classifyContent);
+  if (tag) { pattern = tag.pattern; direction = tag.direction; }
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO trade_memory (image_b64, media_type, description, lesson, outcome, embedding)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-      [data, mediaType, description || '', lesson.trim(), outcome || '', embedding]
+      `INSERT INTO trade_memory (image_b64, media_type, description, lesson, outcome, pattern, direction)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [data, mediaType, description || '', lesson.trim(), outcome || '', pattern, direction]
     );
-    res.json({ success: true, id: rows[0].id, embedded: !!embedding });
+    res.json({ success: true, id: rows[0].id, pattern, direction });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── Memory: reindex (backfill embeddings for rows missing them) ─────────────
+// ─── Memory: retag (backfill formation tags for rows missing them) ───────────
 
 // POST /admin/memory/reindex
 app.post('/admin/memory/reindex', requireAdmin, async (req, res) => {
-  if (!VOYAGE_API_KEY) return res.status(400).json({ error: 'VOYAGE_API_KEY не настроен на сервере' });
   try {
     const { rows } = await pool.query(
-      `SELECT id, image_b64, media_type FROM trade_memory
-       WHERE embedding IS NULL AND image_b64 IS NOT NULL`
+      `SELECT id, image_b64, media_type, description, lesson FROM trade_memory
+       WHERE pattern IS NULL`
     );
     let done = 0;
     for (const r of rows) {
-      const vec = await voyageEmbedImage(toDataUrl(r.image_b64, r.media_type), 'document');
-      if (vec) {
-        await pool.query('UPDATE trade_memory SET embedding = $1 WHERE id = $2', [JSON.stringify(vec), r.id]);
+      const content = [];
+      if (r.image_b64) content.push({ type: 'image', source: { type: 'base64', media_type: r.media_type || 'image/jpeg', data: r.image_b64 } });
+      content.push({ type: 'text', text: `Описание: ${r.description || ''}\nУрок: ${r.lesson || ''}` });
+      const tag = await classifyFormation(content);
+      if (tag) {
+        await pool.query('UPDATE trade_memory SET pattern = $1, direction = $2 WHERE id = $3', [tag.pattern, tag.direction, r.id]);
         done++;
       }
     }
@@ -516,7 +564,7 @@ app.post('/admin/memory/reindex', requireAdmin, async (req, res) => {
 app.get('/admin/memory', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, description, lesson, outcome, created_at,
+      `SELECT id, description, lesson, outcome, pattern, direction, created_at,
               (image_b64 IS NOT NULL) AS has_image
        FROM trade_memory ORDER BY created_at DESC`
     );
@@ -560,7 +608,7 @@ app.delete('/admin/memory/:id', requireAdmin, async (req, res) => {
 app.get('/admin/analysis-log', requireAdmin, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, mode, context, matched, created_at,
+      `SELECT id, mode, context, matched, detected, created_at,
               (query_image IS NOT NULL) AS has_query
        FROM analysis_log ORDER BY created_at DESC`
     );
@@ -618,6 +666,7 @@ app.post('/analyze', async (req, res) => {
   // ── Inject trade memory ──────────────────────────────────────────────────
   let memImages = [];
   let matchedInfo = [];
+  let detectedTag = null;
   try {
     if (MEMORY_LESSONS > 0) {
       const { rows } = await pool.query(
@@ -634,45 +683,28 @@ app.post('/analyze', async (req, res) => {
       }
     }
     // Attach reference screenshots only in deep mode (cost control)
-    if (isDeepMode && MEMORY_IMAGES > 0) {
-      let pickedIds = null;
+    if (isDeepMode && MEMORY_IMAGES > 0 && screenshotBase64) {
+      // Classify the current chart, then pull past trades of the SAME formation type
+      const tag = await classifyFormation([
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 } },
+        { type: 'text', text: 'Классифицируй этот график.' }
+      ]);
 
-      // Visual similarity search: embed the current chart, rank memory by cosine
-      if (VOYAGE_API_KEY && screenshotBase64) {
-        const queryVec = await voyageEmbedImage(toDataUrl(screenshotBase64, 'image/jpeg'), 'query');
-        if (queryVec) {
-          const { rows } = await pool.query(
-            `SELECT id, embedding FROM trade_memory WHERE embedding IS NOT NULL`
-          );
-          const scored = rows
-            .map(r => { try { return { id: r.id, sim: cosineSim(queryVec, JSON.parse(r.embedding)) }; } catch { return null; } })
-            .filter(Boolean)
-            .sort((a, b) => b.sim - a.sim)
-            .slice(0, MEMORY_IMAGES);
-          if (scored.length) {
-            pickedIds = scored.map(s => s.id);
-            matchedInfo = scored.map(s => ({ id: s.id, sim: Number(s.sim.toFixed(4)), method: 'similar' }));
-            console.log(`[analyze] similar memories: ${scored.map(s => `#${s.id}=${s.sim.toFixed(3)}`).join(' ')}`);
-          }
-        }
-      }
-
-      if (pickedIds) {
-        // Fetch the chosen rows, preserve similarity order
+      if (tag && tag.pattern !== 'нет_паттерна') {
+        detectedTag = tag;
+        // Same pattern; prefer same direction; newest first
         const { rows } = await pool.query(
-          `SELECT id, image_b64, media_type, lesson, outcome FROM trade_memory WHERE id = ANY($1)`,
-          [pickedIds]
-        );
-        memImages = pickedIds.map(id => rows.find(r => r.id === id)).filter(Boolean);
-      } else {
-        // Fallback: most recent screenshots (no Voyage key or no embeddings yet)
-        const { rows } = await pool.query(
-          `SELECT id, image_b64, media_type, lesson, outcome FROM trade_memory
-           WHERE image_b64 IS NOT NULL ORDER BY created_at DESC LIMIT $1`,
-          [MEMORY_IMAGES]
+          `SELECT id, image_b64, media_type, lesson, outcome, pattern, direction FROM trade_memory
+           WHERE image_b64 IS NOT NULL AND pattern = $1
+           ORDER BY (direction = $2) DESC, created_at DESC
+           LIMIT $3`,
+          [tag.pattern, tag.direction, MEMORY_IMAGES]
         );
         memImages = rows;
-        matchedInfo = rows.map(r => ({ id: r.id, sim: null, method: 'recent' }));
+        matchedInfo = rows.map(r => ({ id: r.id, pattern: r.pattern, direction: r.direction }));
+        console.log(`[analyze] detected=${tag.pattern}/${tag.direction} matched=${rows.map(r => `#${r.id}`).join(' ') || 'none'}`);
+      } else {
+        console.log(`[analyze] no clear pattern detected — no memory attached`);
       }
     }
   } catch (err) {
@@ -683,9 +715,10 @@ app.post('/analyze', async (req, res) => {
   if (isDeepMode) {
     try {
       await pool.query(
-        `INSERT INTO analysis_log (mode, context, query_image, query_media, matched)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [mode, context || '', screenshotBase64 || null, 'image/jpeg', JSON.stringify(matchedInfo)]
+        `INSERT INTO analysis_log (mode, context, query_image, query_media, matched, detected)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [mode, context || '', screenshotBase64 || null, 'image/jpeg', JSON.stringify(matchedInfo),
+         detectedTag ? `${detectedTag.pattern}/${detectedTag.direction}` : null]
       );
       await pool.query(
         `DELETE FROM analysis_log WHERE id NOT IN (

@@ -305,7 +305,7 @@
         <h2>📚 База памяти</h2>
         <div style="display:flex;gap:8px;align-items:center">
           <span class="msg" id="mem-reindex-msg" style="font-size:11px"></span>
-          <button class="btn btn-outline" id="mem-reindex-btn" title="Пересчитать визуальные embeddings для записей без них">⚡ Переиндексировать</button>
+          <button class="btn btn-outline" id="mem-reindex-btn" title="Определить тип формации для записей без тега">🏷 Проставить теги</button>
           <button class="btn btn-outline" id="mem-refresh-btn">↻ Обновить</button>
         </div>
       </div>
@@ -678,9 +678,10 @@
         <div style="display:flex;gap:14px;padding:16px;border-bottom:1px solid #1a2240">
           ${img}
           <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="uid-cell" style="font-size:12px">#${r.id}</span>
               ${outcomeBadge(r.outcome)}
+              ${r.pattern ? `<span class="badge" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.3);color:#818cf8">${escHtml(r.pattern)}${r.direction ? ' · ' + escHtml(r.direction) : ''}</span>` : '<span class="badge" style="background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.25);color:#94a3b8">без тега</span>'}
               <span class="date-cell">${date}</span>
             </div>
             <div style="font-size:13px;color:#e2e8f0;line-height:1.5">${escHtml(r.lesson)}</div>
@@ -742,15 +743,16 @@
         ? matched.map(m => `
             <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
               <img src="/admin/memory/${m.id}/image?password=${pw}" style="width:130px;border-radius:8px;border:1px solid #2d3561" onerror="this.style.display='none'">
-              <span style="font-size:11px;color:#94a3b8">#${m.id}${m.sim != null ? ` · ${(m.sim*100).toFixed(1)}%` : ' · последняя'}</span>
+              <span style="font-size:11px;color:#94a3b8">#${m.id}${m.pattern ? ` · ${m.pattern}` : ''}${m.direction ? ' · ' + m.direction : ''}</span>
             </div>`).join('')
         : '<span class="date-cell">память не подбиралась</span>';
 
       return `
         <div style="padding:16px;border-bottom:1px solid #1a2240;display:flex;flex-direction:column;gap:10px">
-          <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
             <span class="badge">${modeLabel(r.mode)}</span>
             ${r.context ? `<span style="font-size:12px;color:#94a3b8">${escHtml(r.context)}</span>` : ''}
+            ${r.detected ? `<span class="badge" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.3);color:#818cf8">определено: ${escHtml(r.detected)}</span>` : ''}
             <span class="date-cell" style="margin-left:auto">${date}</span>
           </div>
           <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
@@ -772,7 +774,7 @@
     const msg = document.getElementById('mem-reindex-msg');
     const btn = document.getElementById('mem-reindex-btn');
     btn.disabled = true;
-    btn.textContent = 'Считаю...';
+    btn.textContent = 'Размечаю...';
     msg.className = 'msg';
     msg.textContent = '';
     try {
@@ -783,7 +785,8 @@
       const data = await res.json();
       if (res.ok && data.success) {
         msg.className = 'msg ok';
-        msg.textContent = `✅ Обработано ${data.reindexed}/${data.total}`;
+        msg.textContent = `✅ Размечено ${data.reindexed}/${data.total}`;
+        loadMemory();
       } else {
         msg.className = 'msg err';
         msg.textContent = '❌ ' + (data.error || 'Ошибка');
@@ -793,7 +796,7 @@
       msg.textContent = '❌ ' + err.message;
     }
     btn.disabled = false;
-    btn.textContent = '⚡ Переиндексировать';
+    btn.textContent = '🏷 Проставить теги';
     setTimeout(() => { msg.textContent = ''; }, 6000);
   });
 
