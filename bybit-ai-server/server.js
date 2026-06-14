@@ -16,7 +16,7 @@ const PORT              = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEMO_UID          = process.env.DEMO_UID || '1000000';
 // Landing-page config (set REFERRAL_LINK in Railway; KYC has a sensible default).
-const REFERRAL_LINK     = process.env.REFERRAL_LINK || 'https://www.bybit.com/invite?ref=YOUR_CODE';
+const REFERRAL_LINK     = process.env.REFERRAL_LINK || 'https://partner.bybit.com/b/CRYPTONAFT';
 const KYC_LINK          = process.env.KYC_LINK || 'https://www.bybit.com/ru-RU/help-center/article/How-to-Transfer-Your-Identity-to-Another-Account';
 const MIN_BALANCE       = process.env.MIN_BALANCE || '100';
 

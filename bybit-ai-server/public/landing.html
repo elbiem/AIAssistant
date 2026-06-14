@@ -3,123 +3,217 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Трейдер — ассистент анализа графиков для ByBit</title>
-<meta name="description" content="AI-ассистент, который анализирует твой график на ByBit прямо в браузере: оценивает вход в лонг/шорт, читает твою разметку, помогает с дисциплиной.">
+<title>AI Трейдер — премиум ассистент анализа графиков для ByBit</title>
+<meta name="description" content="AI-ассистент, встроенный в ByBit: оценивает вход в лонг/шорт, читает твою разметку, опирается на базу успешных сделок и помогает с дисциплиной.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root {
-    --bg: #0a0e1a; --bg2: #0e1426; --card: #111934; --border: #1e2746;
-    --txt: #e6ecff; --muted: #8b96b8; --accent: #818cf8; --accent2: #6366f1;
-    --green: #22c55e; --green-d: #16a34a; --red: #ef4444;
+  *,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --bg:#060911; --bg2:#0a0f1e;
+    --txt:#eaf0ff; --muted:#97a3c4; --faint:#5b678a;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --indigo:#8b95ff; --violet:#a855f7; --green:#2bd47b; --green2:#16a34a;
+    --gold:#f5c451;
+    --glass:rgba(255,255,255,.035);
+    --shadow:0 20px 60px -20px rgba(0,0,0,.7);
   }
-  body {
-    background: var(--bg); color: var(--txt);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  html{ scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
+  body{
+    background:var(--bg); color:var(--txt); line-height:1.6; overflow-x:hidden;
+    font-family:'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
   }
-  a { color: inherit; }
-  .wrap { max-width: 920px; margin: 0 auto; padding: 0 20px; }
-  .btn {
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    padding: 14px 26px; border-radius: 12px; font-size: 16px; font-weight: 700;
-    text-decoration: none; cursor: pointer; border: none; transition: transform .12s, filter .12s;
+  a{ color:inherit; text-decoration:none; }
+  .wrap{ width:100%; max-width:980px; margin:0 auto; padding:0 22px; }
+  .grad-txt{ background:linear-gradient(110deg,#c7cdff,#8b95ff 40%,#a855f7); -webkit-background-clip:text; background-clip:text; color:transparent; }
+
+  /* glow backdrop */
+  .glow{ position:fixed; border-radius:50%; filter:blur(90px); opacity:.5; z-index:-1; pointer-events:none; }
+  .glow.a{ width:520px; height:520px; background:#4f46e5; top:-180px; left:50%; transform:translateX(-50%); opacity:.35; }
+  .glow.b{ width:360px; height:360px; background:#a855f7; top:400px; right:-140px; opacity:.18; }
+  .glow.c{ width:360px; height:360px; background:#2bd47b; top:1100px; left:-160px; opacity:.12; }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:9px;
+    padding:15px 28px; border-radius:14px; font-size:16px; font-weight:700; cursor:pointer;
+    border:1px solid transparent; transition:transform .14s ease, box-shadow .14s ease, filter .14s ease;
+    white-space:nowrap;
   }
-  .btn:hover { transform: translateY(-1px); filter: brightness(1.08); }
-  .btn-green { background: linear-gradient(135deg, var(--green), var(--green-d)); color: #06140b; }
-  .btn-accent { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0a0e1a; }
-  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--txt); }
+  .btn:hover{ transform:translateY(-2px); }
+  .btn-green{ background:linear-gradient(135deg,#34e088,#16a34a); color:#03130a; box-shadow:0 10px 30px -10px rgba(43,212,123,.55); }
+  .btn-green:hover{ box-shadow:0 16px 40px -12px rgba(43,212,123,.7); }
+  .btn-accent{ background:linear-gradient(135deg,#9aa3ff,#7c3aed); color:#0a0e1a; box-shadow:0 10px 30px -10px rgba(124,58,237,.6); }
+  .btn-accent:hover{ box-shadow:0 16px 40px -12px rgba(124,58,237,.75); }
+  .btn-ghost{ background:rgba(255,255,255,.04); border:1px solid var(--line2); color:var(--txt); }
+  .btn-ghost:hover{ background:rgba(255,255,255,.08); }
+
+  /* Top bar */
+  .nav{ display:flex; align-items:center; justify-content:space-between; padding:20px 0; }
+  .logo{ display:flex; align-items:center; gap:10px; font-weight:800; font-size:18px; letter-spacing:-.01em; }
+  .logo .dot{ width:34px; height:34px; border-radius:10px; display:grid; place-items:center; font-size:18px;
+    background:linear-gradient(135deg,#7c3aed,#2bd47b); box-shadow:0 8px 24px -8px rgba(124,58,237,.7); }
+  .nav .btn{ padding:11px 20px; font-size:14px; }
 
   /* Hero */
-  header {
-    background: radial-gradient(1100px 480px at 50% -10%, rgba(99,102,241,.22), transparent 60%), var(--bg);
-    border-bottom: 1px solid var(--border); padding: 70px 0 60px; text-align: center;
+  header{ position:relative; padding-bottom:40px; }
+  .hero{ display:grid; grid-template-columns:1.1fr .9fr; gap:40px; align-items:center; padding:46px 0 30px; }
+  .pill{ display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:700; letter-spacing:.03em;
+    color:var(--gold); background:rgba(245,196,81,.1); border:1px solid rgba(245,196,81,.28);
+    padding:7px 15px; border-radius:999px; margin-bottom:22px; }
+  h1{ font-size:clamp(34px,5.4vw,52px); line-height:1.08; font-weight:800; letter-spacing:-.025em; }
+  .sub{ font-size:clamp(16px,2.2vw,19px); color:var(--muted); max-width:540px; margin:20px 0 30px; }
+  .cta-row{ display:flex; gap:14px; flex-wrap:wrap; }
+  .trust{ margin-top:22px; display:flex; gap:22px; flex-wrap:wrap; color:var(--faint); color:var(--muted); font-size:13.5px; }
+  .trust b{ color:var(--txt); }
+
+  /* Hero mock (assistant panel) */
+  .mock{
+    background:linear-gradient(180deg,rgba(20,26,48,.9),rgba(12,16,32,.92));
+    border:1px solid var(--line2); border-radius:20px; padding:18px; box-shadow:var(--shadow);
+    backdrop-filter:blur(10px); transform:rotate(1.2deg); position:relative;
   }
-  .badge {
-    display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .04em;
-    color: var(--accent); background: rgba(129,140,248,.12);
-    border: 1px solid rgba(129,140,248,.3); border-radius: 999px; padding: 6px 14px; margin-bottom: 22px;
+  .mock::after{ content:""; position:absolute; inset:0; border-radius:20px; padding:1px;
+    background:linear-gradient(140deg,rgba(124,58,237,.5),transparent 40%,rgba(43,212,123,.35));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0); -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+  .mock .mhead{ display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; margin-bottom:12px; }
+  .mock .mhead .d{ width:24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:13px; background:linear-gradient(135deg,#7c3aed,#2bd47b); }
+  .mock .row{ display:flex; gap:8px; margin-bottom:12px; }
+  .chip{ flex:1; text-align:center; font-size:12px; font-weight:700; padding:9px 0; border-radius:10px; border:1px solid var(--line); color:var(--muted); }
+  .chip.g{ color:#34e088; border-color:rgba(43,212,123,.35); background:rgba(43,212,123,.08); }
+  .chip.r{ color:#ff6b6b; border-color:rgba(239,68,68,.3); }
+  .verdict{ background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:12px; padding:14px; font-size:13.5px; }
+  .verdict .v{ color:#34e088; font-weight:800; margin-bottom:8px; }
+  .verdict .l{ color:var(--muted); display:flex; justify-content:space-between; padding:3px 0; }
+  .verdict .l b{ color:var(--txt); font-weight:600; }
+
+  /* sections */
+  section{ position:relative; padding:64px 0; }
+  .eyebrow{ text-align:center; color:var(--indigo); font-weight:700; font-size:13px; letter-spacing:.12em; text-transform:uppercase; margin-bottom:12px; }
+  h2{ font-size:clamp(26px,3.6vw,34px); font-weight:800; letter-spacing:-.02em; text-align:center; }
+  .lead{ text-align:center; color:var(--muted); max-width:600px; margin:14px auto 0; font-size:16.5px; }
+
+  .grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin-top:42px; }
+  .card{
+    background:var(--glass); border:1px solid var(--line); border-radius:18px; padding:26px;
+    transition:transform .16s, border-color .16s, box-shadow .16s; backdrop-filter:blur(6px);
   }
-  h1 { font-size: 42px; line-height: 1.15; font-weight: 800; letter-spacing: -.02em; }
-  h1 .grad { background: linear-gradient(135deg, #a5b4fc, #818cf8); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .sub { font-size: 19px; color: var(--muted); max-width: 620px; margin: 18px auto 32px; }
-  .cta-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .card:hover{ transform:translateY(-3px); border-color:var(--line2); box-shadow:var(--shadow); }
+  .card .ic{ width:48px; height:48px; border-radius:13px; display:grid; place-items:center; font-size:24px; margin-bottom:16px;
+    background:linear-gradient(135deg,rgba(124,58,237,.22),rgba(43,212,123,.16)); border:1px solid var(--line2); }
+  .card h3{ font-size:18px; margin-bottom:7px; letter-spacing:-.01em; }
+  .card p{ color:var(--muted); font-size:14.5px; }
 
-  section { padding: 60px 0; }
-  section.alt { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-  h2 { font-size: 30px; font-weight: 800; letter-spacing: -.01em; text-align: center; margin-bottom: 10px; }
-  .lead { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 40px; font-size: 17px; }
+  .why{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:42px; }
+  .why .card{ text-align:center; }
+  .why .big{ font-size:clamp(26px,4vw,34px); font-weight:800; letter-spacing:-.02em; }
+  .why .big.grad{ background:linear-gradient(120deg,#9aa3ff,#a855f7); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .why .big.green{ color:#34e088; }
+  .why p{ color:var(--muted); font-size:14px; margin-top:6px; }
 
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-  .feature {
-    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px 22px;
+  /* conditions premium box */
+  .reqbox{ max-width:640px; margin:40px auto 0;
+    background:linear-gradient(180deg,rgba(245,196,81,.06),rgba(255,255,255,.02));
+    border:1px solid rgba(245,196,81,.22); border-radius:20px; padding:26px 26px; }
+  .reqbox h3{ text-align:center; font-size:16px; color:var(--gold); letter-spacing:.02em; margin-bottom:16px; }
+  .req{ display:flex; gap:13px; align-items:flex-start; padding:11px 0; border-top:1px solid var(--line); }
+  .req:first-of-type{ border-top:none; }
+  .req .chk{ flex:0 0 24px; height:24px; border-radius:7px; display:grid; place-items:center; font-size:13px; font-weight:800;
+    background:rgba(43,212,123,.14); color:#34e088; border:1px solid rgba(43,212,123,.35); }
+  .req span{ color:var(--muted); font-size:15px; }
+  .req b{ color:var(--txt); }
+
+  /* steps */
+  .steps{ max-width:720px; margin:42px auto 0; display:flex; flex-direction:column; gap:14px; }
+  .step{ display:flex; gap:18px; align-items:flex-start; }
+  .step .n{ flex:0 0 44px; height:44px; border-radius:13px; font-weight:800; font-size:18px; display:grid; place-items:center;
+    background:linear-gradient(135deg,rgba(124,58,237,.25),rgba(124,58,237,.08)); color:#b9c0ff; border:1px solid var(--line2); }
+  .step .body{ flex:1; background:var(--glass); border:1px solid var(--line); border-radius:16px; padding:18px 20px; }
+  .step h3{ font-size:17px; margin-bottom:5px; }
+  .step p{ color:var(--muted); font-size:14.5px; }
+  .step a.inline{ color:var(--indigo); font-weight:600; text-decoration:underline; }
+  .step .mini{ display:inline-flex; margin-top:12px; padding:11px 18px; font-size:14px; border-radius:11px; }
+
+  /* form */
+  .form-wrap{ max-width:540px; margin:40px auto 0; position:relative; }
+  .form-card{ background:linear-gradient(180deg,rgba(20,26,48,.7),rgba(12,16,32,.7)); border:1px solid var(--line2);
+    border-radius:22px; padding:32px; box-shadow:var(--shadow); backdrop-filter:blur(10px); }
+  .form-card label{ display:block; font-size:13px; color:var(--muted); margin:16px 0 7px; font-weight:600; }
+  .form-card label:first-child{ margin-top:0; }
+  .form-card input{ width:100%; padding:15px 17px; font-size:16px; border-radius:13px; font-family:inherit;
+    background:rgba(0,0,0,.3); border:1px solid var(--line2); color:var(--txt); outline:none; transition:border-color .15s, box-shadow .15s; }
+  .form-card input::placeholder{ color:#566; color:var(--faint); color:#5b678a; }
+  .form-card input:focus{ border-color:var(--indigo); box-shadow:0 0 0 4px rgba(139,149,255,.14); }
+  .form-card .btn{ width:100%; margin-top:24px; }
+  #apply-msg{ margin-top:16px; font-size:15px; text-align:center; display:none; line-height:1.5; }
+  #apply-msg.ok{ color:#34e088; display:block; }
+  #apply-msg.err{ color:#ff6b6b; display:block; }
+  .hint{ text-align:center; color:var(--faint); color:var(--muted); font-size:13px; margin-top:14px; opacity:.85; }
+
+  footer{ padding:46px 0 56px; border-top:1px solid var(--line); margin-top:30px; text-align:center; }
+  .disclaimer{ max-width:740px; margin:0 auto; font-size:12.5px; color:var(--muted); opacity:.75; line-height:1.7; }
+  .foot-logo{ margin:0 auto 16px; }
+
+  @media (max-width:780px){
+    .hero{ grid-template-columns:1fr; gap:30px; padding:30px 0 10px; }
+    .mock{ transform:none; max-width:420px; margin:0 auto; width:100%; }
+    .sub{ max-width:none; }
+    .grid,.why{ grid-template-columns:1fr; }
+    section{ padding:50px 0; }
+    .cta-row .btn{ flex:1 1 auto; }
+    .step .n{ flex-basis:40px; height:40px; font-size:16px; }
   }
-  .feature .ic { font-size: 26px; margin-bottom: 10px; }
-  .feature h3 { font-size: 17px; margin-bottom: 6px; }
-  .feature p { color: var(--muted); font-size: 14.5px; }
-
-  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-  .why div { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; text-align: center; }
-  .why .big { font-size: 30px; font-weight: 800; color: var(--accent); }
-  .why p { color: var(--muted); font-size: 14px; margin-top: 4px; }
-
-  /* Steps */
-  .steps { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-  .step {
-    display: flex; gap: 16px; align-items: flex-start;
-    background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px;
-  }
-  .step .n {
-    flex: 0 0 36px; height: 36px; border-radius: 10px; font-weight: 800;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(129,140,248,.14); color: var(--accent); border: 1px solid rgba(129,140,248,.3);
-  }
-  .step h3 { font-size: 17px; margin-bottom: 4px; }
-  .step p { color: var(--muted); font-size: 14.5px; }
-  .step a.inline { color: var(--accent); font-weight: 600; text-decoration: underline; }
-  .step .mini { display: inline-flex; margin-top: 10px; padding: 9px 16px; font-size: 14px; border-radius: 10px; }
-
-  .reqs { max-width: 560px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 10px; }
-  .req { display: flex; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; }
-  .req .chk { color: var(--green); font-size: 18px; font-weight: 800; }
-  .req b { color: var(--txt); }
-  .req span { color: var(--muted); font-size: 14.5px; }
-
-  /* Form */
-  .form-card {
-    max-width: 520px; margin: 0 auto; background: var(--card);
-    border: 1px solid var(--border); border-radius: 18px; padding: 30px;
-  }
-  .form-card label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
-  .form-card input {
-    width: 100%; padding: 14px 16px; font-size: 16px; border-radius: 12px;
-    background: var(--bg); border: 1px solid var(--border); color: var(--txt); outline: none;
-  }
-  .form-card input:focus { border-color: var(--accent); }
-  .form-card .btn { width: 100%; margin-top: 22px; }
-  #apply-msg { margin-top: 16px; font-size: 15px; text-align: center; display: none; }
-  #apply-msg.ok { color: var(--green); display: block; }
-  #apply-msg.err { color: var(--red); display: block; }
-
-  footer { padding: 40px 0; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; text-align: center; }
-  .disclaimer { max-width: 720px; margin: 0 auto; font-size: 12.5px; color: var(--muted); opacity: .8; }
-
-  @media (max-width: 640px) {
-    h1 { font-size: 32px; }
-    .grid, .why { grid-template-columns: 1fr; }
-    section { padding: 44px 0; }
+  @media (max-width:440px){
+    .wrap{ padding:0 16px; }
+    .nav .btn{ padding:9px 14px; }
+    .form-card{ padding:24px 20px; }
+    .card{ padding:22px; }
   }
 </style>
 </head>
 <body>
+<div class="glow a"></div><div class="glow b"></div><div class="glow c"></div>
 
 <header>
   <div class="wrap">
-    <div class="badge">🤖 AI ТРЕЙДЕР · для ByBit</div>
-    <h1>Твой второй взгляд на график<br><span class="grad">на базе искусственного интеллекта</span></h1>
-    <p class="sub">Ассистент встроен прямо в окно ByBit. Один клик — и ИИ оценивает текущую ситуацию, твою точку входа и помогает не совершать импульсивных ошибок.</p>
-    <div class="cta-row">
-      <a class="btn btn-accent" href="#apply">Подать заявку на доступ</a>
-      <a class="btn btn-ghost" href="#how">Как это работает</a>
+    <div class="nav">
+      <div class="logo"><span class="dot">🤖</span> AI Трейдер</div>
+      <a class="btn btn-ghost" href="#apply">Получить доступ</a>
+    </div>
+
+    <div class="hero">
+      <div>
+        <div class="pill">✦ Премиум-ассистент для ByBit</div>
+        <h1>Твой второй взгляд<br>на график <span class="grad-txt">от ИИ</span></h1>
+        <p class="sub">Ассистент встроен прямо в окно ByBit. Один клик — и искусственный интеллект оценивает ситуацию, твою точку входа и удерживает тебя от импульсивных ошибок.</p>
+        <div class="cta-row">
+          <a class="btn btn-accent" href="#apply">Подать заявку на доступ</a>
+          <a class="btn btn-ghost" href="#how">Как это работает</a>
+        </div>
+        <div class="trust">
+          <span>⚡ <b>Мгновенный</b> анализ</span>
+          <span>🧠 База <b>успешных</b> сделок</span>
+          <span>💬 Коуч по <b>дисциплине</b></span>
+        </div>
+      </div>
+
+      <div class="mock" aria-hidden="true">
+        <div class="mhead"><span class="d">🤖</span> AI Трейдер</div>
+        <div class="row">
+          <div class="chip g">Лонг?</div>
+          <div class="chip r">Шорт?</div>
+          <div class="chip">Анализ</div>
+        </div>
+        <div class="verdict">
+          <div class="v">✅ Входи — пробой подтверждён</div>
+          <div class="l"><span>Вход</span><b>0.3102</b></div>
+          <div class="l"><span>Вероятность</span><b>72%</b></div>
+          <div class="l"><span>🎯 Цели</span><b>0.318 → 0.326</b></div>
+          <div class="l"><span>🛑 Стоп</span><b>0.305 (−1.6%)</b></div>
+          <div class="l"><span>⚖️ R:R</span><b>1:3 — Хороший</b></div>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -127,42 +221,44 @@
 <!-- What it is -->
 <section>
   <div class="wrap">
-    <h2>Что это такое</h2>
-    <p class="lead">AI Трейдер — это расширение для браузера, которое анализирует твой график на ByBit с помощью ИИ. Ты сам решаешь, входить или нет — ассистент даёт независимую оценку, чтобы решение было осознанным, а не на эмоциях.</p>
+    <div class="eyebrow">Что это такое</div>
+    <h2>ИИ-разбор графика прямо в ByBit</h2>
+    <p class="lead">Расширение для браузера, которое анализирует твой график с помощью ИИ. Решение всегда за тобой — ассистент даёт независимую оценку, чтобы оно было осознанным, а не на эмоциях.</p>
     <div class="grid">
-      <div class="feature">
+      <div class="card">
         <div class="ic">⚡</div>
         <h3>Мгновенный анализ</h3>
-        <p>Кнопки «Лонг?», «Шорт?» и «Анализ» — ИИ смотрит на текущий график и отвечает по делу: входить, не входить или ждать, с вероятностью и целями.</p>
+        <p>Кнопки «Лонг?», «Шорт?» и «Анализ» — ИИ смотрит на текущий график и отвечает по делу: входить, не входить или ждать, с вероятностью, целями и стопом.</p>
       </div>
-      <div class="feature">
+      <div class="card">
         <div class="ic">✏️</div>
         <h3>Читает твою разметку</h3>
         <p>Распознаёт нарисованные тобой линии, уровни и трендовые, точки входа и выхода — и оценивает, насколько они валидны.</p>
       </div>
-      <div class="feature">
+      <div class="card">
         <div class="ic">🧠</div>
         <h3>База успешных сделок</h3>
-        <p>Внутри — большая база реальных прибыльных сделок. ИИ сопоставляет текущую ситуацию с похожими выигрышными формациями из этой базы, чтобы точнее подсказать вход и выход.</p>
+        <p>Внутри — большая база реальных прибыльных сделок. ИИ сопоставляет текущую ситуацию с похожими выигрышными формациями, чтобы точнее подсказать вход и выход.</p>
       </div>
-      <div class="feature">
+      <div class="card">
         <div class="ic">💬</div>
         <h3>Психологический коуч</h3>
-        <p>В чате ассистент поддержит дисциплину: успокоит при импульсе и FOMO, придаст уверенности действовать по плану, поможет вести открытую сделку без паники.</p>
+        <p>В чате поддержит дисциплину: успокоит при импульсе и FOMO, придаст уверенности действовать по плану, поможет вести открытую сделку без паники.</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- Why -->
-<section class="alt">
+<section>
   <div class="wrap">
-    <h2>Зачем он нужен</h2>
+    <div class="eyebrow">Зачем он нужен</div>
+    <h2>Дисциплина важнее прогноза</h2>
     <p class="lead">Большинство сливов — не из-за плохого анализа, а из-за эмоций: вход без плана, передвинутый стоп, отыгрыш. Ассистент бьёт именно по этому.</p>
     <div class="why">
-      <div><div class="big">2-й</div><p>взгляд на сетап перед входом — чтобы не торговать вслепую</p></div>
-      <div><div class="big">−FOMO</div><p>останавливает импульсивные и азартные входы против плана</p></div>
-      <div><div class="big">+дисциплина</div><p>помогает держать стоп и фиксировать по плану, а не на эмоциях</p></div>
+      <div class="card"><div class="big grad">2-й взгляд</div><p>на сетап перед входом — чтобы не торговать вслепую</p></div>
+      <div class="card"><div class="big grad">− FOMO</div><p>останавливает импульсивные и азартные входы против плана</p></div>
+      <div class="card"><div class="big green">+ контроль</div><p>помогает держать стоп и фиксировать по плану, а не на эмоциях</p></div>
     </div>
   </div>
 </section>
@@ -170,18 +266,20 @@
 <!-- How / steps -->
 <section id="how">
   <div class="wrap">
-    <h2>Как получить доступ</h2>
-    <p class="lead">Доступ открывается реферралам. Два условия — и подаёшь заявку.</p>
+    <div class="eyebrow">Доступ</div>
+    <h2>Как начать пользоваться</h2>
+    <p class="lead">Доступ открывается рефералам. Два условия — и подаёшь заявку.</p>
 
-    <div class="reqs">
+    <div class="reqbox">
+      <h3>✦ УСЛОВИЯ ДОСТУПА</h3>
       <div class="req"><span class="chk">✓</span><span><b>Регистрация по реферальной ссылке</b> ниже (или перенос KYC на новый аккаунт под ссылкой).</span></div>
-      <div class="req"><span class="chk">✓</span><span>Минимум <b>${{MIN_BALANCE}}</b> на балансе аккаунта.</span></div>
+      <div class="req"><span class="chk">✓</span><span>Минимум <b>${{MIN_BALANCE}}</b> на балансе аккаунта — депозит остаётся твоим.</span></div>
     </div>
 
-    <div class="steps" style="margin-top:32px">
+    <div class="steps">
       <div class="step">
         <div class="n">1</div>
-        <div>
+        <div class="body">
           <h3>Зарегистрируйся на ByBit по ссылке</h3>
           <p>Это обязательное условие доступа. Уже есть аккаунт? Можно <a class="inline" href="{{KYC_LINK}}" target="_blank" rel="noopener">перенести верификацию (KYC) на новый аккаунт</a> под этой ссылкой.</p>
           <a class="btn btn-green mini" href="{{REFERRAL_LINK}}" target="_blank" rel="noopener">Зарегистрироваться на ByBit →</a>
@@ -189,16 +287,16 @@
       </div>
       <div class="step">
         <div class="n">2</div>
-        <div>
+        <div class="body">
           <h3>Пополни баланс минимум на ${{MIN_BALANCE}}</h3>
           <p>Депозит на твоём аккаунте — он остаётся твоим, это просто условие активации доступа.</p>
         </div>
       </div>
       <div class="step">
         <div class="n">3</div>
-        <div>
+        <div class="body">
           <h3>Подай заявку со своим UID</h3>
-          <p>Введи UID своего аккаунта ByBit в форме ниже. Я проверю выполнение условий и одобрю доступ.</p>
+          <p>Введи UID своего аккаунта ByBit в форме ниже. Я проверю выполнение условий и открою доступ.</p>
         </div>
       </div>
     </div>
@@ -206,25 +304,30 @@
 </section>
 
 <!-- Apply form -->
-<section class="alt" id="apply">
+<section id="apply">
   <div class="wrap">
-    <h2>Заявка на доступ</h2>
+    <div class="eyebrow">Заявка</div>
+    <h2>Получить доступ</h2>
     <p class="lead">Где взять UID: ByBit → профиль (аватар вверху) → UID указан рядом с именем аккаунта.</p>
-    <div class="form-card">
-      <label for="uid">Твой ByBit UID *</label>
-      <input type="text" id="uid" inputmode="numeric" placeholder="Например: 123456789" maxlength="15" autocomplete="off">
-      <label for="contact">Контакт для связи (необязательно)</label>
-      <input type="text" id="contact" placeholder="Telegram @username или email" maxlength="120" autocomplete="off">
-      <button class="btn btn-accent" id="apply-btn">Отправить заявку</button>
-      <div id="apply-msg"></div>
+    <div class="form-wrap">
+      <div class="form-card">
+        <label for="uid">Твой ByBit UID *</label>
+        <input type="text" id="uid" inputmode="numeric" placeholder="Например: 123456789" maxlength="15" autocomplete="off">
+        <label for="contact">Контакт для связи (необязательно)</label>
+        <input type="text" id="contact" placeholder="Telegram @username или email" maxlength="120" autocomplete="off">
+        <button class="btn btn-accent" id="apply-btn">Отправить заявку</button>
+        <div id="apply-msg"></div>
+        <div class="hint">Заявку рассмотрю вручную и открою доступ после проверки условий.</div>
+      </div>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
+    <div class="logo foot-logo" style="justify-content:center"><span class="dot">🤖</span> AI Трейдер</div>
     <p class="disclaimer">AI Трейдер — вспомогательный инструмент анализа. Это не финансовая и не инвестиционная рекомендация. Торговля криптовалютой и деривативами связана с высоким риском потери средств; решения ты принимаешь самостоятельно и под свою ответственность. ИИ может ошибаться.</p>
-    <p style="margin-top:18px">© AI Трейдер</p>
+    <p style="margin-top:18px; color:var(--faint); color:var(--muted); font-size:13px;">© AI Трейдер</p>
   </div>
 </footer>
 
@@ -232,40 +335,33 @@
   const btn = document.getElementById('apply-btn');
   const msg = document.getElementById('apply-msg');
 
-  async function submitApply() {
+  async function submitApply(){
     const uid = document.getElementById('uid').value.trim();
     const contact = document.getElementById('contact').value.trim();
-    msg.className = ''; msg.style.display = 'none';
-    if (!/^\d{5,15}$/.test(uid)) {
-      msg.className = 'err'; msg.textContent = '❌ Введи корректный UID (только цифры).';
-      return;
+    msg.className=''; msg.style.display='none';
+    if(!/^\d{5,15}$/.test(uid)){
+      msg.className='err'; msg.textContent='❌ Введи корректный UID (только цифры).'; return;
     }
-    btn.disabled = true; btn.textContent = 'Отправляю...';
-    try {
-      const res = await fetch('/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid, contact })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        msg.className = 'ok';
-        msg.textContent = data.status === 'approved'
+    btn.disabled=true; btn.textContent='Отправляю...';
+    try{
+      const res=await fetch('/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid,contact})});
+      const data=await res.json();
+      if(res.ok && data.success){
+        msg.className='ok';
+        msg.textContent = data.status==='approved'
           ? '✅ Этот UID уже одобрен — доступ открыт. Можно пользоваться ассистентом.'
           : '✅ Заявка отправлена! Я проверю условия и открою доступ. Обычно это занимает немного времени.';
-        document.getElementById('uid').value = '';
-        document.getElementById('contact').value = '';
-      } else {
-        msg.className = 'err'; msg.textContent = '❌ ' + (data.error || 'Не удалось отправить. Попробуй позже.');
+        document.getElementById('uid').value=''; document.getElementById('contact').value='';
+      }else{
+        msg.className='err'; msg.textContent='❌ '+(data.error||'Не удалось отправить. Попробуй позже.');
       }
-    } catch (e) {
-      msg.className = 'err'; msg.textContent = '❌ Ошибка сети. Попробуй ещё раз.';
+    }catch(e){
+      msg.className='err'; msg.textContent='❌ Ошибка сети. Попробуй ещё раз.';
     }
-    btn.disabled = false; btn.textContent = 'Отправить заявку';
+    btn.disabled=false; btn.textContent='Отправить заявку';
   }
-
-  btn.addEventListener('click', submitApply);
-  document.getElementById('uid').addEventListener('keydown', e => { if (e.key === 'Enter') submitApply(); });
+  btn.addEventListener('click',submitApply);
+  document.getElementById('uid').addEventListener('keydown',e=>{ if(e.key==='Enter') submitApply(); });
 </script>
 </body>
 </html>
