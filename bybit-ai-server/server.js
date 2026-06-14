@@ -628,6 +628,24 @@ app.delete('/admin/memory/:id', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Memory: set direction manually (long/short tagging from admin) ──────────
+
+// POST /admin/memory/:id/direction  { direction: 'лонг' | 'шорт' | 'нейтрально' }
+app.post('/admin/memory/:id/direction', requireAdmin, async (req, res) => {
+  const dir = req.body.direction;
+  if (!['лонг', 'шорт', 'нейтрально'].includes(dir)) {
+    return res.status(400).json({ error: 'direction must be лонг | шорт | нейтрально' });
+  }
+  try {
+    const { rowCount } = await pool.query(
+      'UPDATE trade_memory SET direction = $1 WHERE id = $2', [dir, req.params.id]
+    );
+    res.json({ success: rowCount > 0, direction: dir });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Analysis log: which chart was analyzed and which memories matched ───────
 
 // GET /admin/analysis-log
@@ -708,30 +726,31 @@ app.post('/analyze', async (req, res) => {
 Уроки:\n${lessons}`;
       }
     }
-    // Attach reference screenshots only in deep mode (cost control)
+    // Attach reference screenshots only in deep mode (cost control).
+    // The Long/Short button decides WHICH side of memory to learn from:
+    // pressing Long → only LONG past trades, Short → only SHORT. Among that
+    // side, prefer the same formation as the current chart.
     if (isDeepMode && MEMORY_IMAGES > 0 && screenshotBase64) {
-      // Classify the current chart, then pull past trades of the SAME formation type
+      const wantDir = mode === 'long' ? 'лонг' : 'шорт';
+      // Classify the current chart only to prefer the same formation; the
+      // direction filter comes from the button, not from the classifier.
       const tag = await classifyFormation([
         { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 } },
         { type: 'text', text: 'Классифицируй этот график.' }
       ]);
+      detectedTag = tag;
+      const detectedPattern = (tag && tag.pattern !== 'нет_паттерна') ? tag.pattern : null;
 
-      if (tag && tag.pattern !== 'нет_паттерна') {
-        detectedTag = tag;
-        // Same pattern; prefer same direction; newest first
-        const { rows } = await pool.query(
-          `SELECT id, image_b64, media_type, lesson, outcome, pattern, direction FROM trade_memory
-           WHERE image_b64 IS NOT NULL AND pattern = $1
-           ORDER BY (direction = $2) DESC, created_at DESC
-           LIMIT $3`,
-          [tag.pattern, tag.direction, MEMORY_IMAGES]
-        );
-        memImages = rows;
-        matchedInfo = rows.map(r => ({ id: r.id, pattern: r.pattern, direction: r.direction }));
-        console.log(`[analyze] detected=${tag.pattern}/${tag.direction} matched=${rows.map(r => `#${r.id}`).join(' ') || 'none'}`);
-      } else {
-        console.log(`[analyze] no clear pattern detected — no memory attached`);
-      }
+      const { rows } = await pool.query(
+        `SELECT id, image_b64, media_type, lesson, outcome, pattern, direction FROM trade_memory
+         WHERE image_b64 IS NOT NULL AND direction = $1
+         ORDER BY (pattern = $2) DESC, created_at DESC
+         LIMIT $3`,
+        [wantDir, detectedPattern, MEMORY_IMAGES]
+      );
+      memImages = rows;
+      matchedInfo = rows.map(r => ({ id: r.id, pattern: r.pattern, direction: r.direction }));
+      console.log(`[analyze] mode=${mode} dir=${wantDir} detected=${detectedPattern || 'none'} matched=${rows.map(r => `#${r.id}`).join(' ') || 'none'}`);
     }
   } catch (err) {
     console.error('Memory load error:', err.message);

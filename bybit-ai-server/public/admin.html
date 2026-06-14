@@ -667,6 +667,13 @@
       : o === 'в ноль' ? '<span class="badge" style="background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.25);color:#94a3b8">➖ в ноль</span>'
       : '';
 
+    const dirBtn = (id, dir, label, cur) => {
+      const active = cur === dir;
+      const col = dir === 'лонг' ? '#22c55e' : '#ef4444';
+      const bg = active ? (dir === 'лонг' ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)') : 'transparent';
+      return `<button onclick="setMemoryDirection(${id},'${dir}')" style="padding:3px 11px;font-size:11px;border-radius:6px;cursor:pointer;border:1px solid ${col}66;background:${bg};color:${col};font-weight:${active ? '700' : '400'}">${label}</button>`;
+    };
+
     const cards = rows.map(r => {
       const date = new Date(r.created_at).toLocaleString('ru', {
         day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
@@ -681,7 +688,8 @@
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
               <span class="uid-cell" style="font-size:12px">#${r.id}</span>
               ${outcomeBadge(r.outcome)}
-              ${r.pattern ? `<span class="badge" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.3);color:#818cf8">${escHtml(r.pattern)}${r.direction ? ' · ' + escHtml(r.direction) : ''}</span>` : '<span class="badge" style="background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.25);color:#94a3b8">без тега</span>'}
+              ${r.pattern ? `<span class="badge" style="background:rgba(99,102,241,0.12);border-color:rgba(99,102,241,0.3);color:#818cf8">${escHtml(r.pattern)}</span>` : '<span class="badge" style="background:rgba(148,163,184,0.1);border-color:rgba(148,163,184,0.25);color:#94a3b8">без тега</span>'}
+              <span style="display:flex;gap:6px;align-items:center">${dirBtn(r.id, 'лонг', 'Лонг', r.direction)}${dirBtn(r.id, 'шорт', 'Шорт', r.direction)}</span>
               <span class="date-cell">${date}</span>
             </div>
             <div style="font-size:13px;color:#e2e8f0;line-height:1.5">${escHtml(r.lesson)}</div>
@@ -701,6 +709,20 @@
         method: 'DELETE',
         headers: { 'x-admin-password': adminPassword }
       });
+      loadMemory();
+    } catch (err) {
+      alert('Ошибка: ' + err.message);
+    }
+  }
+
+  async function setMemoryDirection(id, direction) {
+    try {
+      const res = await fetch(`/admin/memory/${id}/direction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+        body: JSON.stringify({ direction })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       loadMemory();
     } catch (err) {
       alert('Ошибка: ' + err.message);
