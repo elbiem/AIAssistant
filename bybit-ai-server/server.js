@@ -744,13 +744,22 @@ app.post('/analyze', async (req, res) => {
 
   const currentContent = [];
 
-  // Reference screenshots from memory (clearly labeled as past examples, NOT signals)
+  // Reference screenshots from memory. These charts carry the trader's own
+  // markup — read it, don't just glance: 🟢 arrow/dot = trade ENTRY point,
+  // 🔴 = trade EXIT (close) point, green horizontal/diagonal lines = the levels
+  // and trendlines the trade was built on, % in the title = the result.
   for (const mem of memImages) {
-    currentContent.push({ type: 'text', text: `📚 Справочный пример из прошлого${mem.outcome ? ` (${mem.outcome})` : ''} — НЕ сигнал торговать так же: ${mem.lesson}` });
+    currentContent.push({ type: 'text', text: `📚 Похожая формация из прошлого${mem.outcome ? ` — итог: ${mem.outcome}` : ''}. Урок: ${mem.lesson}. На картинке ниже разметка трейдера — изучи её:` });
     currentContent.push({ type: 'image', source: { type: 'base64', media_type: mem.media_type || 'image/jpeg', data: mem.image_b64 } });
   }
   if (memImages.length) {
-    currentContent.push({ type: 'text', text: '⬆️ Выше — справочные примеры прошлых сделок (только контекст, НЕ сигнал). ⬇️ Ниже — ТЕКУЩИЙ график. Оцени его НЕЗАВИСИМО: сначала глобальный тренд (приоритет!), затем структура. Не копируй направление примеров, если текущий тренд другой:' });
+    currentContent.push({ type: 'text', text: `⬆️ Выше — справочные скриншоты прошлых сделок. Как читать разметку на них:
+• 🟢 стрелка/точка с пунктиром = МОМЕНТ ВХОДА в сделку (открытие).
+• 🔴 стрелка/точка с пунктиром = МОМЕНТ ВЫХОДА (закрытие). Стоп-лосса и тейк-профита на скринах НЕТ — только вход и выход.
+• Зелёные горизонтальные и наклонные линии = уровни и трендовые, по которым строилась сделка.
+• % в заголовке = итоговый результат сделки.
+По каждому примеру определи: ГДЕ был вход относительно зелёных уровней (на пробое уровня / на ретесте пробитого / на отскоке от линии / внутри формации), где он закрылся, и привёл ли такой вход к плюсу. Выбери пример, наиболее похожий на ТЕКУЩУЮ ситуацию по расположению цены относительно уровней, и используй его, чтобы точнее выбрать точку входа и выхода в текущем графике.
+⬇️ Ниже — ТЕКУЩИЙ график. Оцени его НЕЗАВИСИМО: сначала глобальный тренд (приоритет!), затем структура. Память подсказывает ГДЕ ставить вход/выход в похожей формации, но НЕ диктует направление — если текущий тренд противоположен примеру, не копируй его направление:` });
   }
 
   if (screenshotBase64) {
