@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI Трейдер — премиум ассистент анализа графиков для ByBit</title>
+<title>AI Трейдер — ассистент анализа графиков для ByBit</title>
 <meta name="description" content="AI-ассистент, встроенный в ByBit: оценивает вход в лонг/шорт, читает твою разметку, опирается на базу успешных сделок и помогает с дисциплиной.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -184,7 +184,7 @@
 
     <div class="hero">
       <div>
-        <div class="pill">✦ Премиум-ассистент для ByBit</div>
+        <div class="pill">✦ AI-ассистент для ByBit</div>
         <h1>Твой второй взгляд<br>на график <span class="grad-txt">от ИИ</span></h1>
         <p class="sub">Ассистент встроен прямо в окно ByBit. Один клик — и искусственный интеллект оценивает ситуацию, твою точку входа и удерживает тебя от импульсивных ошибок.</p>
         <div class="cta-row">
@@ -296,7 +296,7 @@
         <div class="n">3</div>
         <div class="body">
           <h3>Подай заявку со своим UID</h3>
-          <p>Введи UID своего аккаунта ByBit в форме ниже. Я проверю выполнение условий и открою доступ.</p>
+          <p>Введи UID своего аккаунта ByBit в форме ниже. Доступ откроется после проверки выполнения условий.</p>
         </div>
       </div>
     </div>
@@ -317,7 +317,7 @@
         <input type="text" id="contact" placeholder="Telegram @username или email" maxlength="120" autocomplete="off">
         <button class="btn btn-accent" id="apply-btn">Отправить заявку</button>
         <div id="apply-msg"></div>
-        <div class="hint">Заявку рассмотрю вручную и открою доступ после проверки условий.</div>
+        <div class="hint">Заявка рассматривается вручную — доступ откроется после проверки условий.</div>
       </div>
     </div>
   </div>
@@ -350,7 +350,7 @@
         msg.className='ok';
         msg.textContent = data.status==='approved'
           ? '✅ Этот UID уже одобрен — доступ открыт. Можно пользоваться ассистентом.'
-          : '✅ Заявка отправлена! Я проверю условия и открою доступ. Обычно это занимает немного времени.';
+          : '✅ Ваша заявка отправлена! Доступ откроется после проверки условий — обычно это занимает немного времени.';
         document.getElementById('uid').value=''; document.getElementById('contact').value='';
       }else{
         msg.className='err'; msg.textContent='❌ '+(data.error||'Не удалось отправить. Попробуй позже.');
