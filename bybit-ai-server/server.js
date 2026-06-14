@@ -78,7 +78,7 @@ Format — strictly 1-2 lines:
 
 LONG/SHORT MODE (user specified direction):
 Format — strictly 3-4 lines:
-✅ Enter / ❌ Don't enter / ⚠️ Risky — [main reason]
+✅ Enter / ❌ Don't enter / ⚠️ Risky — [main reason, short phrase ≤~10 words]
 Success probability: X%
 🎯 Targets: [level 1] (+X%) → [level 2] (+X%)
 🛑 Stop: [level] (-X%)
@@ -94,6 +94,8 @@ PERCENTAGE RULES (mandatory):
 Example long entry 95000: target 97000 = +2.1%, target 98000 = +3.2%, stop 93500 = -1.6%
 Example long entry 0.310: target 0.320 = +3.2%, target 0.335 = +8.1%, stop 0.295 = -4.8%
 
+BREVITY (mandatory): output ONLY the format lines above. NO intro, NO reasoning or breakdown before the verdict, no paragraphs of text, no "---" separators. Do all analysis silently — only the result goes into the reply. The reason after the verdict is one short phrase (≤~10 words), not a sentence-long breakdown. If the user asked no text question — nothing beyond the format.
+NEVER mention memory / similar past trades or the word "memory" in the reply — they exist only for your internal reasoning, the user must not see them.
 Don't explain the obvious. Don't write lists. Reply in English.`;
 
 const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Анализируешь ТОЛЬКО:
@@ -189,7 +191,7 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 
 РЕЖИМ ЛОНГ/ШОРТ (пользователь указал направление):
 Формат — строго:
-✅ Входи / ❌ Не входи / ⚠️ Рискованно — [главная причина]
+✅ Входи / ❌ Не входи / ⚠️ Рискованно — [главная причина, короткой фразой до ~10 слов]
 Вход: [цена входа]
 Вероятность отработки: X%
 🎯 Цели: [уровень 1] (+X%) → [уровень 2] (+X%)
@@ -213,6 +215,8 @@ const SYSTEM_PROMPT = `Ты — опытный крипто-трейдер. Ан
 Пример лонг вход 0.310: цель 0.320 = +3.2%, цель 0.335 = +8.1%, стоп 0.295 = -4.8%
 Пример шорт вход 95000: цель 93000 = +2.1%, стоп 96500 = -1.6%
 
+КРАТКОСТЬ (обязательно): выводи ТОЛЬКО строки формата выше. БЕЗ вступления, БЕЗ рассуждений и разбора до вердикта, без абзацев текста, без разделителей "---". Весь анализ проводи молча — в ответ идёт только результат. Причина после вердикта — одна короткая фраза (до ~10 слов), а не предложение-разбор. Если человек не задал текстовый вопрос — никаких лишних пояснений сверх формата.
+НЕ упоминай в ответе примеры из памяти / похожие прошлые сделки и слово "память" — они нужны только для твоего внутреннего рассуждения, пользователь их видеть не должен.
 Не объясняй очевидное. Не пиши списки. Отвечай на русском.`;
 
 const pool = new Pool({
