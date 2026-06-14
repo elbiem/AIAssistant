@@ -215,6 +215,17 @@
       </div>
     </div>
 
+    <!-- Applications -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📨 Заявки на доступ <span id="apps-pending-count" style="font-size:13px;color:#818cf8;font-weight:600"></span></h2>
+        <button class="btn btn-outline" id="apps-refresh-btn">↻ Обновить</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        <div id="apps-container"><div class="empty-state">Загрузка...</div></div>
+      </div>
+    </div>
+
     <!-- Add UID -->
     <div class="card">
       <div class="card-header">
@@ -367,6 +378,7 @@
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('dashboard').style.display = '';
       document.getElementById('logout-btn').style.display = '';
+      loadApplications();
       loadUIDs();
       loadMemory();
       loadAnalysisLog();
@@ -389,6 +401,88 @@
     document.getElementById('logout-btn').style.display = 'none';
     document.getElementById('login-password').value = '';
   });
+
+  // ─── Applications ─────────────────────────────────────────────────────────
+
+  async function loadApplications() {
+    try {
+      const res = await fetch('/admin/applications', { headers: { 'x-admin-password': adminPassword } });
+      const rows = await res.json();
+      renderApplications(Array.isArray(rows) ? rows : []);
+    } catch (err) {
+      document.getElementById('apps-container').innerHTML =
+        '<div class="empty-state">Ошибка загрузки</div>';
+    }
+  }
+
+  function renderApplications(rows) {
+    const pending = rows.filter(r => r.status === 'pending');
+    document.getElementById('apps-pending-count').textContent =
+      pending.length ? `· ${pending.length} новых` : '';
+    if (!rows.length) {
+      document.getElementById('apps-container').innerHTML =
+        '<div class="empty-state">Заявок пока нет</div>';
+      return;
+    }
+    const statusBadge = s =>
+      s === 'pending' ? '<span class="badge" style="background:rgba(234,179,8,.12);border-color:rgba(234,179,8,.3);color:#eab308">⏳ новая</span>'
+      : s === 'approved' ? '<span class="badge">✅ одобрена</span>'
+      : '<span class="badge" style="background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.25);color:#ef4444">❌ отклонена</span>';
+
+    document.getElementById('apps-container').innerHTML = rows.map(r => {
+      const date = new Date(r.created_at).toLocaleString('ru', {
+        day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+      const actions = r.status === 'pending'
+        ? `<button class="btn btn-primary" onclick="approveApp(${r.id})">Одобрить</button>
+           <button class="btn btn-danger" onclick="rejectApp(${r.id})">Отклонить</button>`
+        : `<button class="btn btn-outline" onclick="deleteApp(${r.id})">Удалить</button>`;
+      return `
+        <div style="display:flex;gap:14px;align-items:center;padding:14px 18px;border-bottom:1px solid #1a2240;flex-wrap:wrap">
+          <div style="flex:1;min-width:180px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="uid-cell" style="font-size:14px;font-weight:700">${escHtml(r.uid)}</span>
+              ${statusBadge(r.status)}
+              <span class="date-cell">${date}</span>
+            </div>
+            ${r.contact ? `<div style="font-size:13px;color:#94a3b8;margin-top:4px">📩 ${escHtml(r.contact)}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:8px">${actions}</div>
+        </div>`;
+    }).join('');
+  }
+
+  async function approveApp(id) {
+    try {
+      const res = await fetch(`/admin/applications/${id}/approve`, {
+        method: 'POST', headers: { 'x-admin-password': adminPassword }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      loadApplications();
+      loadUIDs();
+    } catch (err) { alert('Ошибка: ' + err.message); }
+  }
+
+  async function rejectApp(id) {
+    try {
+      await fetch(`/admin/applications/${id}/reject`, {
+        method: 'POST', headers: { 'x-admin-password': adminPassword }
+      });
+      loadApplications();
+    } catch (err) { alert('Ошибка: ' + err.message); }
+  }
+
+  async function deleteApp(id) {
+    if (!confirm('Удалить заявку?')) return;
+    try {
+      await fetch(`/admin/applications/${id}`, {
+        method: 'DELETE', headers: { 'x-admin-password': adminPassword }
+      });
+      loadApplications();
+    } catch (err) { alert('Ошибка: ' + err.message); }
+  }
+
+  document.getElementById('apps-refresh-btn').addEventListener('click', loadApplications);
 
   // ─── Load UIDs ──────────────────────────────────────────────────────────────
 

@@ -2,6 +2,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(express.json({ limit: '15mb' }));
@@ -14,6 +15,10 @@ const ACCESS_KEY        = process.env.ACCESS_KEY || 'bybit-ext-key';
 const PORT              = process.env.PORT || 3000;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEMO_UID          = process.env.DEMO_UID || '1000000';
+// Landing-page config (set REFERRAL_LINK in Railway; KYC has a sensible default).
+const REFERRAL_LINK     = process.env.REFERRAL_LINK || 'https://www.bybit.com/invite?ref=YOUR_CODE';
+const KYC_LINK          = process.env.KYC_LINK || 'https://www.bybit.com/ru-RU/help-center/article/How-to-Transfer-Your-Identity-to-Another-Account';
+const MIN_BALANCE       = process.env.MIN_BALANCE || '100';
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 // Sonnet handles the trade verdict (long/short/auto). Opus is reserved for the one
@@ -339,6 +344,16 @@ async function initDB() {
     )
   `);
   await pool.query(`ALTER TABLE analysis_log ADD COLUMN IF NOT EXISTS detected VARCHAR(60)`);
+  // Landing-page access applications (UID submitted from the lead page)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS applications (
+      id         SERIAL PRIMARY KEY,
+      uid        VARCHAR(50) NOT NULL,
+      contact    TEXT DEFAULT '',
+      status     VARCHAR(12) DEFAULT 'pending',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   console.log('DB ready');
 }
 
@@ -496,6 +511,50 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ─── Public: landing page ────────────────────────────────────────────────────
+
+// Pre-render the landing once with the configured links (env-driven, no redeploy
+// needed to change the referral link — just update the Railway variable).
+const LANDING_HTML = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'public', 'landing.html'), 'utf8')
+      .replace(/{{REFERRAL_LINK}}/g, REFERRAL_LINK)
+      .replace(/{{KYC_LINK}}/g, KYC_LINK)
+      .replace(/{{MIN_BALANCE}}/g, MIN_BALANCE);
+  } catch (err) {
+    console.error('Landing load failed:', err.message);
+    return '<h1>AI Трейдер</h1><p>Страница временно недоступна.</p>';
+  }
+})();
+
+app.get('/', (req, res) => res.type('html').send(LANDING_HTML));
+
+// ─── Public: submit access application ───────────────────────────────────────
+
+// POST /apply  { uid, contact }
+app.post('/apply', async (req, res) => {
+  const uid = (req.body.uid || '').toString().trim();
+  const contact = (req.body.contact || '').toString().trim().slice(0, 200);
+  if (!/^\d{5,15}$/.test(uid)) {
+    return res.status(400).json({ error: 'Укажи корректный ByBit UID (только цифры).' });
+  }
+  try {
+    const { rows: allowed } = await pool.query('SELECT 1 FROM allowed_uids WHERE uid = $1', [uid]);
+    if (allowed.length) return res.json({ success: true, status: 'approved' });
+
+    const { rows: pending } = await pool.query(
+      `SELECT 1 FROM applications WHERE uid = $1 AND status = 'pending'`, [uid]
+    );
+    if (pending.length) return res.json({ success: true, status: 'pending' });
+
+    await pool.query('INSERT INTO applications (uid, contact) VALUES ($1, $2)', [uid, contact]);
+    res.json({ success: true, status: 'pending' });
+  } catch (err) {
+    console.error('Apply error:', err.message);
+    res.status(500).json({ error: 'Не удалось отправить заявку, попробуй позже.' });
+  }
+});
+
 // ─── Public: check UID ───────────────────────────────────────────────────────
 
 // GET /check?uid=12345&key=ACCESS_KEY
@@ -573,6 +632,58 @@ app.delete('/admin/uids/:uid', requireAdmin, async (req, res) => {
       'DELETE FROM allowed_uids WHERE uid = $1',
       [req.params.uid]
     );
+    res.json({ success: true, deleted: rowCount > 0 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Admin: access applications ──────────────────────────────────────────────
+
+// GET /admin/applications — pending first, then most recent
+app.get('/admin/applications', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, uid, contact, status, created_at FROM applications
+       ORDER BY (status = 'pending') DESC, created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/applications/:id/approve — grant access (adds UID to allowed list)
+app.post('/admin/applications/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT uid FROM applications WHERE id = $1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Заявка не найдена' });
+    const uid = rows[0].uid;
+    await pool.query(
+      `INSERT INTO allowed_uids (uid, note) VALUES ($1, 'из заявки') ON CONFLICT (uid) DO NOTHING`,
+      [uid]
+    );
+    await pool.query(`UPDATE applications SET status = 'approved' WHERE id = $1`, [req.params.id]);
+    res.json({ success: true, uid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/applications/:id/reject
+app.post('/admin/applications/:id/reject', requireAdmin, async (req, res) => {
+  try {
+    await pool.query(`UPDATE applications SET status = 'rejected' WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /admin/applications/:id
+app.delete('/admin/applications/:id', requireAdmin, async (req, res) => {
+  try {
+    const { rowCount } = await pool.query('DELETE FROM applications WHERE id = $1', [req.params.id]);
     res.json({ success: true, deleted: rowCount > 0 });
   } catch (err) {
     res.status(500).json({ error: err.message });
