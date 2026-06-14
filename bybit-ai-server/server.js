@@ -18,7 +18,7 @@ const DEMO_UID          = process.env.DEMO_UID || '1000000';
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
 // Sonnet for all chart analysis — it reads trend/structure more reliably here than
 // Opus did, and matches the (correct) auto-analysis behaviour. Override via env.
-const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-sonnet-4-6';
+const MODEL_DEEP = process.env.MODEL_DEEP || 'claude-opus-4-8';
 const MODEL_FAST = process.env.MODEL_FAST || 'claude-sonnet-4-6';
 
 // How many past-trade screenshots from memory to attach during deep analysis (cost driver).
