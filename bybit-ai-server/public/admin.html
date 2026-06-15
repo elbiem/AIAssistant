@@ -26,7 +26,29 @@
     .topbar h1 { font-size: 18px; font-weight: 700; color: #818cf8; }
     .topbar span { font-size: 12px; color: #475569; }
 
-    .container { max-width: 860px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 24px; }
+    .container { max-width: 1040px; margin: 0 auto; padding: 24px 24px 48px; display: flex; flex-direction: column; gap: 20px; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid #1f2d50; }
+    .tab {
+      padding: 11px 18px; font-size: 13.5px; font-weight: 600; color: #94a3b8;
+      background: transparent; border: none; border-bottom: 2px solid transparent;
+      cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-family: inherit;
+      transition: color .15s, border-color .15s;
+    }
+    .tab:hover { color: #e2e8f0; }
+    .tab.active { color: #818cf8; border-bottom-color: #818cf8; }
+    .tab .pill {
+      font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px;
+      background: rgba(234,179,8,.16); color: #eab308; border: 1px solid rgba(234,179,8,.32);
+    }
+    .tab-panel { display: none; flex-direction: column; gap: 20px; }
+    .tab-panel.active { display: flex; }
+    @media (max-width: 640px) {
+      .container { padding: 16px 14px 40px; }
+      .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .tab { padding: 11px 13px; white-space: nowrap; }
+    }
 
     /* Login */
     #login-screen {
@@ -215,6 +237,14 @@
       </div>
     </div>
 
+    <nav class="tabs">
+      <button class="tab active" data-tab="apps">📨 Заявки <span class="pill" id="tab-apps-badge" style="display:none"></span></button>
+      <button class="tab" data-tab="users">👥 Пользователи</button>
+      <button class="tab" data-tab="memory">🧠 Память</button>
+      <button class="tab" data-tab="analysis">🔎 Анализы</button>
+    </nav>
+
+    <div class="tab-panel active" id="panel-apps">
     <!-- Applications -->
     <div class="card">
       <div class="card-header">
@@ -225,7 +255,9 @@
         <div id="apps-container"><div class="empty-state">Загрузка...</div></div>
       </div>
     </div>
+    </div><!-- /panel-apps -->
 
+    <div class="tab-panel" id="panel-users">
     <!-- Add UID -->
     <div class="card">
       <div class="card-header">
@@ -265,7 +297,9 @@
         </div>
       </div>
     </div>
+    </div><!-- /panel-users -->
 
+    <div class="tab-panel" id="panel-memory">
     <!-- Memory: add -->
     <div class="card">
       <div class="card-header">
@@ -326,7 +360,9 @@
         </div>
       </div>
     </div>
+    </div><!-- /panel-memory -->
 
+    <div class="tab-panel" id="panel-analysis">
     <!-- Analysis log -->
     <div class="card">
       <div class="card-header">
@@ -339,6 +375,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /panel-analysis -->
 
   </div>
 </div>
@@ -348,6 +385,13 @@
   let allUIDs = [];
 
   document.getElementById('server-url').textContent = window.location.origin;
+
+  // ─── Tabs ─────────────────────────────────────────────────────────────────
+  function switchTab(name) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  }
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
 
   // ─── Login ──────────────────────────────────────────────────────────────────
 
@@ -419,6 +463,11 @@
     const pending = rows.filter(r => r.status === 'pending');
     document.getElementById('apps-pending-count').textContent =
       pending.length ? `· ${pending.length} новых` : '';
+    const tabBadge = document.getElementById('tab-apps-badge');
+    if (tabBadge) {
+      tabBadge.textContent = pending.length;
+      tabBadge.style.display = pending.length ? '' : 'none';
+    }
     if (!rows.length) {
       document.getElementById('apps-container').innerHTML =
         '<div class="empty-state">Заявок пока нет</div>';
