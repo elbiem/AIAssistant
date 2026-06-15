@@ -514,16 +514,21 @@
       return;
     }
 
+    const fmt = d => d ? new Date(d).toLocaleString('ru', {
+      day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
+    }) : '—';
+
     const rows = uids.map(u => {
-      const date = new Date(u.added_at).toLocaleString('ru', {
-        day: '2-digit', month: '2-digit', year: '2-digit',
-        hour: '2-digit', minute: '2-digit'
-      });
+      const activity = `<span style="color:#34e088;font-weight:700">${u.today ?? 0}</span> <span style="color:#475569">сег.</span>
+        · <span style="font-weight:700">${u.week ?? 0}</span> <span style="color:#475569">7д</span>
+        · <span style="color:#818cf8;font-weight:700">${u.total ?? 0}</span> <span style="color:#475569">всего</span>`;
       return `
         <tr>
           <td class="uid-cell">${escHtml(u.uid)}</td>
           <td class="note-cell">${escHtml(u.note || '—')}</td>
-          <td class="date-cell">${date}</td>
+          <td style="font-size:13px;white-space:nowrap">${activity}</td>
+          <td class="date-cell">${fmt(u.last_seen)}</td>
+          <td class="date-cell">${fmt(u.added_at)}</td>
           <td><button class="btn btn-danger" onclick="removeUID('${escHtml(u.uid)}')">Удалить</button></td>
         </tr>`;
     }).join('');
@@ -534,6 +539,8 @@
           <tr>
             <th>ByBit UID</th>
             <th>Заметка</th>
+            <th>Активность</th>
+            <th>Посл. запрос</th>
             <th>Добавлен</th>
             <th></th>
           </tr>

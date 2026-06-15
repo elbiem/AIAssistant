@@ -354,6 +354,18 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Per-user usage tracking: lifetime counter + last activity on the user row,
+  // plus a lightweight event log for today/7-day windows (auto-pruned).
+  await pool.query(`ALTER TABLE allowed_uids ADD COLUMN IF NOT EXISTS request_count INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE allowed_uids ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id         SERIAL PRIMARY KEY,
+      uid        VARCHAR(50) NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS usage_events_uid_at_idx ON usage_events (uid, created_at)`);
   console.log('DB ready');
 }
 
@@ -595,9 +607,18 @@ app.get('/admin', (req, res) => {
 // GET /admin/uids
 app.get('/admin/uids', requireAdmin, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      'SELECT uid, note, added_at FROM allowed_uids ORDER BY added_at DESC'
-    );
+    // Keep the event log bounded (40 days covers the 7-day window with margin)
+    pool.query(`DELETE FROM usage_events WHERE created_at < NOW() - INTERVAL '40 days'`).catch(() => {});
+    const { rows } = await pool.query(`
+      SELECT u.uid, u.note, u.added_at, u.last_seen,
+             COALESCE(u.request_count, 0) AS total,
+             COUNT(e.id) FILTER (WHERE e.created_at >= date_trunc('day', NOW())) AS today,
+             COUNT(e.id) FILTER (WHERE e.created_at >= NOW() - INTERVAL '7 days') AS week
+      FROM allowed_uids u
+      LEFT JOIN usage_events e ON e.uid = u.uid
+      GROUP BY u.uid, u.note, u.added_at, u.last_seen, u.request_count
+      ORDER BY u.added_at DESC
+    `);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -896,6 +917,13 @@ app.post('/analyze', async (req, res) => {
     } catch (err) {
       return res.status(500).json({ error: 'DB error' });
     }
+    // Track usage (best-effort, fire-and-forget — never blocks the analysis)
+    const u = uid.trim();
+    pool.query(
+      `UPDATE allowed_uids SET request_count = COALESCE(request_count, 0) + 1, last_seen = NOW() WHERE uid = $1`,
+      [u]
+    ).catch(() => {});
+    pool.query(`INSERT INTO usage_events (uid) VALUES ($1)`, [u]).catch(() => {});
   }
 
   if (!ANTHROPIC_API_KEY) {
