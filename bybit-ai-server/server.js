@@ -988,10 +988,11 @@ app.post('/analyze', async (req, res) => {
     }
   }
 
-  // Deep mode: a focused Opus pass reads line/level geometry on the current chart
-  // (its strength). Its reading is injected into the Sonnet verdict as fact.
+  // Any chart analysis (long / short / auto "Анализ"): a focused Opus pass reads
+  // line/level geometry on the current chart (its strength). Its reading is then
+  // injected into the Sonnet verdict as fact — keeps all button modes accurate.
   let lineReading = null;
-  if (isDeepMode && shot) {
+  if (!isChat && shot) {
     try {
       lineReading = await callClaude({
         model: MODEL_LINE, maxTokens: 220, cache: false, system: LINE_READ_SYSTEM,

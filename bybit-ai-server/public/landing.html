@@ -296,7 +296,7 @@
         <div class="n">3</div>
         <div class="body">
           <h3>Подай заявку со своим UID</h3>
-          <p>Введи UID своего аккаунта ByBit в форме ниже. Доступ откроется после проверки выполнения условий.</p>
+          <p>Введи UID своего аккаунта ByBit в форме ниже. Доступ предоставляется после проверки соответствия условиям.</p>
         </div>
       </div>
     </div>
@@ -317,7 +317,7 @@
         <input type="text" id="contact" placeholder="Telegram @username или email" maxlength="120" autocomplete="off">
         <button class="btn btn-accent" id="apply-btn">Отправить заявку</button>
         <div id="apply-msg"></div>
-        <div class="hint">Заявка рассматривается вручную — доступ откроется после проверки условий.</div>
+        <div class="hint">Доступ предоставляется после проверки соответствия условиям.</div>
       </div>
     </div>
   </div>
@@ -350,7 +350,7 @@
         msg.className='ok';
         msg.textContent = data.status==='approved'
           ? '✅ Этот UID уже одобрен — доступ открыт. Можно пользоваться ассистентом.'
-          : '✅ Ваша заявка отправлена! Доступ откроется после проверки условий — обычно это занимает немного времени.';
+          : '✅ Ваша заявка отправлена! Доступ будет предоставлен после проверки соответствия условиям.';
         document.getElementById('uid').value=''; document.getElementById('contact').value='';
       }else{
         msg.className='err'; msg.textContent='❌ '+(data.error||'Не удалось отправить. Попробуй позже.');
