@@ -329,6 +329,7 @@
         </div>
         <div style="display:flex;gap:10px;align-items:center">
           <button class="btn btn-outline" id="mem-analyze-btn">🔍 Проанализировать</button>
+          <button class="btn btn-primary" id="mem-quickadd-btn" title="Сохранить сразу — описание станет уроком, теги проставятся автоматически">➕ Добавить</button>
           <div class="msg" id="mem-msg" style="flex:1"></div>
         </div>
 
@@ -782,6 +783,41 @@
     btn.textContent = '💾 Сохранить в память';
   });
 
+  document.getElementById('mem-quickadd-btn').addEventListener('click', async () => {
+    const desc = document.getElementById('mem-desc').value.trim();
+    const outcome = document.getElementById('mem-outcome').value;
+    const msg = document.getElementById('mem-msg');
+    const btn = document.getElementById('mem-quickadd-btn');
+
+    if (!memImageData) { msg.className = 'msg err'; msg.textContent = '❌ Прикрепи скриншот сделки'; return; }
+    if (!desc) { msg.className = 'msg err'; msg.textContent = '❌ Заполни описание — оно станет уроком'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Добавляю...';
+    try {
+      const res = await fetch('/admin/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+        body: JSON.stringify({ imageBase64: memImageData, description: desc, lesson: desc, outcome })
+      });
+      const data = await res.json();
+      if (data.success) {
+        msg.className = 'msg ok';
+        msg.textContent = '✅ Добавлено в память';
+        resetMemForm();
+        loadMemory();
+      } else {
+        msg.className = 'msg err';
+        msg.textContent = '❌ ' + (data.error || 'Ошибка');
+      }
+    } catch (err) {
+      msg.className = 'msg err';
+      msg.textContent = '❌ ' + err.message;
+    }
+    btn.disabled = false;
+    btn.textContent = '➕ Добавить';
+  });
+
   document.getElementById('mem-cancel-btn').addEventListener('click', resetMemForm);
 
   function resetMemForm() {
@@ -829,10 +865,10 @@
         day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit'
       });
       const img = r.has_image
-        ? `<img src="/admin/memory/${r.id}/image?password=${encodeURIComponent(adminPassword)}" style="width:120px;height:auto;border-radius:8px;border:1px solid #2d3561;flex-shrink:0">`
+        ? `<img src="/admin/memory/${r.id}/image?password=${encodeURIComponent(adminPassword)}" style="width:200px;height:auto;border-radius:8px;border:1px solid #2d3561;flex-shrink:0;align-self:flex-start;object-fit:contain">`
         : '';
       return `
-        <div style="display:flex;gap:14px;padding:16px;border-bottom:1px solid #1a2240">
+        <div style="display:flex;gap:14px;padding:16px;border-bottom:1px solid #1a2240;align-items:flex-start">
           ${img}
           <div style="flex:1;display:flex;flex-direction:column;gap:6px">
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -908,13 +944,13 @@
         day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'
       });
       const queryImg = r.has_query
-        ? `<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:10px;color:#475569;text-transform:uppercase">Анализируемый график</div><img src="/admin/analysis-log/${r.id}/image?password=${pw}" style="width:200px;border-radius:8px;border:1px solid #2d3561"></div>`
+        ? `<div style="display:flex;flex-direction:column;gap:4px"><div style="font-size:10px;color:#475569;text-transform:uppercase">Анализируемый график</div><img src="/admin/analysis-log/${r.id}/image?password=${pw}" style="width:240px;height:auto;object-fit:contain;align-self:flex-start;border-radius:8px;border:1px solid #2d3561"></div>`
         : '';
       const matched = Array.isArray(r.matched) ? r.matched : [];
       const matchedHtml = matched.length
         ? matched.map(m => `
             <div style="display:flex;flex-direction:column;gap:4px;align-items:center">
-              <img src="/admin/memory/${m.id}/image?password=${pw}" style="width:130px;border-radius:8px;border:1px solid #2d3561" onerror="this.style.display='none'">
+              <img src="/admin/memory/${m.id}/image?password=${pw}" style="width:160px;height:auto;object-fit:contain;border-radius:8px;border:1px solid #2d3561" onerror="this.style.display='none'">
               <span style="font-size:11px;color:#94a3b8">#${m.id}${m.pattern ? ` · ${m.pattern}` : ''}${m.direction ? ' · ' + m.direction : ''}</span>
             </div>`).join('')
         : '<span class="date-cell">память не подбиралась</span>';
